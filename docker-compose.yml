@@ -37,6 +37,12 @@ services:
       BETTER_AUTH_URL: http://localhost:3000
       # Fine for running on your own computer. Use a real random secret when hosting.
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-only-secret-change-before-hosting-7d1f}
+      # Leave unset for test mode (messages are saved, not sent).
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN:-}
+      POSTMARK_INBOUND_ADDRESS: ${POSTMARK_INBOUND_ADDRESS:-}
+      POSTMARK_INBOUND_SECRET: ${POSTMARK_INBOUND_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

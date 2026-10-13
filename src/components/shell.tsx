@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/db";
 import { getCurrentUser } from "@/lib/session";
+import { unreadCount } from "@/server/messaging";
 import { listWorkspacesForUser } from "@/server/workspaces";
 import { NavLink } from "./nav-link";
 import { SignOutButton } from "./sign-out-button";
@@ -9,6 +10,7 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 export async function Shell({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   const workspaces = await listWorkspacesForUser(db, user.id);
+  const unread = Object.fromEntries(await Promise.all(workspaces.map(async (w) => [w.id, await unreadCount(db, w.id)] as const)));
 
   return (
     <div className="flex min-h-screen">
@@ -25,7 +27,7 @@ export async function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="mt-4 flex-1 space-y-6 overflow-y-auto px-3">
-          <WorkspaceNav />
+          <WorkspaceNav unread={unread} />
           <div>
             <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Agency</div>
             <NavLink href="/agency" exact>
@@ -43,19 +45,22 @@ export async function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <MobileBar workspaces={workspaces.map(({ id, name, kind }) => ({ id, name, kind }))} />
+        <MobileBar workspaces={workspaces.map(({ id, name, kind }) => ({ id, name, kind }))} unread={unread} />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </div>
   );
 }
 
-function WorkspaceNav() {
+function WorkspaceNav({ unread }: { unread: Record<string, number> }) {
   return (
     <div>
       <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">This account</div>
       <NavLink workspaceHref="" exact>
         Overview
+      </NavLink>
+      <NavLink workspaceHref="/inbox" badges={unread}>
+        Inbox
       </NavLink>
       <NavLink workspaceHref="/contacts">Contacts</NavLink>
       <NavLink workspaceHref="/pipeline">Pipeline</NavLink>
@@ -64,7 +69,13 @@ function WorkspaceNav() {
   );
 }
 
-function MobileBar({ workspaces }: { workspaces: { id: string; name: string; kind: "agency" | "client" }[] }) {
+function MobileBar({
+  workspaces,
+  unread,
+}: {
+  workspaces: { id: string; name: string; kind: "agency" | "client" }[];
+  unread: Record<string, number>;
+}) {
   return (
     <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
       <div className="mb-2 flex items-center justify-between">
@@ -79,6 +90,9 @@ function MobileBar({ workspaces }: { workspaces: { id: string; name: string; kin
       <div className="mt-2 flex gap-1 overflow-x-auto">
         <NavLink workspaceHref="" exact compact>
           Overview
+        </NavLink>
+        <NavLink workspaceHref="/inbox" compact badges={unread}>
+          Inbox
         </NavLink>
         <NavLink workspaceHref="/contacts" compact>
           Contacts

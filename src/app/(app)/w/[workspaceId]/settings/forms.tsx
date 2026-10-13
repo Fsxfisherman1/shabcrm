@@ -9,6 +9,7 @@ import {
   renameStageAction,
   reorderStagesAction,
 } from "@/actions/pipelines";
+import { updateMessagingSettingsAction } from "@/actions/messaging";
 import { renameAccount } from "@/actions/workspaces";
 import { Button, Card, Field, FormError, Input, Textarea } from "@/components/ui";
 import { useActionForm } from "@/components/use-action-form";
@@ -126,6 +127,53 @@ export function NewPipelineForm({ workspaceId }: { workspaceId: string }) {
       <FormError message={state.error} />
       <Button type="submit" disabled={pending}>
         Create pipeline
+      </Button>
+    </form>
+  );
+}
+
+export function MessagingForm({
+  workspaceId,
+  settings,
+}: {
+  workspaceId: string;
+  settings: {
+    smsNumber: string;
+    forwardCallsTo: string;
+    missedCallTextEnabled: boolean;
+    missedCallText: string;
+    emailFromName: string;
+    emailFromAddress: string;
+  };
+}) {
+  const [state, onSubmit, pending] = useActionForm(updateMessagingSettingsAction.bind(null, workspaceId));
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Texting number" name="smsNumber">
+          <Input id="smsNumber" name="smsNumber" defaultValue={settings.smsNumber} placeholder="The Twilio number for this account" />
+        </Field>
+        <Field label="Forward calls to" name="forwardCallsTo">
+          <Input id="forwardCallsTo" name="forwardCallsTo" defaultValue={settings.forwardCallsTo} placeholder="The business's real phone" />
+        </Field>
+        <Field label="Send emails from (name)" name="emailFromName">
+          <Input id="emailFromName" name="emailFromName" defaultValue={settings.emailFromName} placeholder="e.g. Acme Plumbing" />
+        </Field>
+        <Field label="Send emails from (address)" name="emailFromAddress">
+          <Input id="emailFromAddress" name="emailFromAddress" type="email" defaultValue={settings.emailFromAddress} placeholder="hello@acme.com" />
+        </Field>
+      </div>
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input type="checkbox" name="missedCallTextEnabled" defaultChecked={settings.missedCallTextEnabled} className="h-4 w-4" />
+          Text people back when you miss their call
+        </label>
+        <Textarea name="missedCallText" aria-label="Missed-call text" rows={2} defaultValue={settings.missedCallText} className="mt-2" />
+      </div>
+      <FormError message={state.error} />
+      {state.ok && <p className="text-sm text-emerald-600">{state.message}</p>}
+      <Button type="submit" variant="secondary" disabled={pending}>
+        Save texting and email
       </Button>
     </form>
   );

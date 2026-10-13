@@ -2,7 +2,8 @@
 
 A lean CRM for running an agency and its small-business clients: separate
 accounts per client, contacts with SMS consent tracking, CSV import,
-drag-and-drop pipelines, and a personal to-do list.
+drag-and-drop pipelines, a shared text and email inbox with missed-call
+text-back, and a personal to-do list.
 
 ## Run it on your computer
 
@@ -20,6 +21,24 @@ first person can sign up; that account owns the agency.
 Your data lives in a Docker volume, so it survives restarts. Stop with
 `Ctrl+C`, start again with `docker compose up`. To wipe everything and start
 fresh: `docker compose down -v`.
+
+## Texting and email
+
+Until Twilio and Postmark keys are set, the app runs in **test mode**: you can
+send messages from the inbox and they are saved, but nothing goes out. The
+inbox has a "Pretend a customer messaged you" button for trying replies,
+emails and missed calls.
+
+To go live, set the variables in `.env.example` (`TWILIO_*`, `POSTMARK_*`),
+then for each account open **Settings → Texting and email**, enter its Twilio
+number, and paste the webhook URLs shown there into Twilio (the number's
+"A message comes in" and "A call comes in") and Postmark (inbound webhook).
+Calls to the Twilio number ring the "Forward calls to" phone; if nobody picks
+up, the caller gets the missed-call text.
+
+Texting rules are built in: contacts who reply STOP are never texted again
+(unless they reply START), and a contact without recorded consent can only be
+texted within 24 hours of them texting or calling you.
 
 ## Develop
 

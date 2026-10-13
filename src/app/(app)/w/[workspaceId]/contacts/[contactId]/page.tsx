@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { ConsentBadge } from "@/components/consent-badge";
-import { Badge, Card } from "@/components/ui";
+import { Badge, buttonClass, Card } from "@/components/ui";
 import { contactName, formatDate, formatMoney } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
@@ -19,6 +19,7 @@ const KIND_LABEL: Record<string, string> = {
   deal_created: "Deal",
   stage_changed: "Pipeline",
   consent_changed: "Consent",
+  missed_call: "Call",
 };
 
 export default async function ContactPage({ params }: { params: Promise<{ workspaceId: string; contactId: string }> }) {
@@ -40,6 +41,11 @@ export default async function ContactPage({ params }: { params: Promise<{ worksp
         {contact.tags.map((t) => (
           <Badge key={t}>{t}</Badge>
         ))}
+        {(contact.phone || contact.email) && (
+          <Link href={`/w/${workspaceId}/inbox?c=${contact.id}`} className={`${buttonClass("secondary", "sm")} ml-auto`}>
+            Message
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
