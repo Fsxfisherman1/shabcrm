@@ -164,6 +164,15 @@ calendar app to see its appointments there.
 Calendar passwords and tokens are encrypted with a key derived from
 `BETTER_AUTH_SECRET`; changing that secret means reconnecting calendars.
 
+## Sidebar counts
+
+Red bubbles on the sidebar show what needs a look: **Inbox** counts unread
+conversations, **To-do** counts what's due today or overdue, and **Contacts**,
+**Calendar** (upcoming bookings), **Pipeline** (deals), **Forms** (responses) and
+**Automations** (failed runs) count what's new since you last opened that tab.
+Each person has their own counts. Other accounts show their total in the
+account switcher. The counts refresh as you move around and every 20 seconds.
+
 ## Develop
 
 Requires Node 22, pnpm and Postgres 16.

@@ -273,6 +273,9 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await expect(page.getByText("website lead").first()).toBeVisible();
   await expect(page.getByText(/Filled in "Quote request"/)).toBeVisible();
   await expect(page.getByLabel("SMS consent")).toHaveValue("granted");
+  // The sidebar's red counts: the new response shows on Forms until Forms is opened.
+  await expect(page.getByLabel("1 new response").first()).toBeVisible();
+  await shot(page, "19-sidebar-counts");
 
   // A client's own website form, on another site, with the snippet pasted in.
   await page.goto(`${workspaceUrl}/forms`);

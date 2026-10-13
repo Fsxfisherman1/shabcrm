@@ -7,6 +7,7 @@ import { withWorkspace } from "@/db/tenant";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { contactName, formatMoney } from "@/lib/format";
 import { requireWorkspace } from "@/lib/session";
+import { markTabSeen } from "@/server/badges";
 import { getBoard, listPipelines } from "@/server/pipelines";
 import { Board } from "./board";
 import { NewDealForm } from "./new-deal-form";
@@ -22,7 +23,8 @@ export default async function PipelinePage({
 }) {
   const { workspaceId } = await params;
   const { p, contact } = await searchParams;
-  await requireWorkspace(workspaceId);
+  const { user } = await requireWorkspace(workspaceId);
+  await markTabSeen(db, user.id, workspaceId, "pipeline");
   const pipelines = await listPipelines(db, workspaceId);
   const current = pipelines.find((x) => x.id === p) ?? pipelines[0];
   if (!current) {

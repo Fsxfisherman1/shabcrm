@@ -5,6 +5,7 @@ import { Badge, buttonClass, Card, EmptyState, Input, PageHeader } from "@/compo
 import { contactName, formatDate } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { markTabSeen } from "@/server/badges";
 import { listContacts, listTags } from "@/server/contacts";
 
 const PAGE_SIZE = 50;
@@ -18,7 +19,8 @@ export default async function ContactsPage({
 }) {
   const { workspaceId } = await params;
   const { q, tag, page: pageParam } = await searchParams;
-  await requireWorkspace(workspaceId);
+  const { user } = await requireWorkspace(workspaceId);
+  await markTabSeen(db, user.id, workspaceId, "contacts");
   const page = Math.max(1, Number(pageParam) || 1);
   const [{ rows, total }, tags] = await Promise.all([
     listContacts(db, workspaceId, { search: q, tag, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }),

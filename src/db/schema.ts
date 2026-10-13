@@ -111,6 +111,23 @@ export const memberships = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.workspaceId] })],
 );
 
+// When each person last opened each tab of an account, so the sidebar can
+// count what's new since. Per person, like todos, so it's read by user id.
+export const tabSeen = pgTable(
+  "tab_seen",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    tab: text("tab").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.workspaceId, t.tab] })],
+);
+
 // ---------------------------------------------------------------------------
 // Tenant tables. Every row carries workspace_id and is protected by row-level
 // security (see drizzle/0001_row_level_security.sql).

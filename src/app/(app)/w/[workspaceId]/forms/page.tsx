@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requireWorkspace } from "@/lib/session";
+import { markTabSeen } from "@/server/badges";
 import { CopyField } from "@/components/copy-field";
 import { getCaptureKey } from "@/server/form-capture";
 import { listForms } from "@/server/forms";
@@ -14,7 +15,8 @@ export const metadata: Metadata = { title: "Forms" };
 
 export default async function FormsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
-  await requireWorkspace(workspaceId);
+  const { user } = await requireWorkspace(workspaceId);
+  await markTabSeen(db, user.id, workspaceId, "forms");
   const [list, key] = await Promise.all([listForms(db, workspaceId), getCaptureKey(db, workspaceId)]);
   const { appUrl } = messagingConfig();
   const snippet = `<script src="${appUrl}/api/capture/${key}/script.js" async></script>`;

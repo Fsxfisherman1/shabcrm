@@ -3,6 +3,8 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import { BADGE_LABEL, type BadgeTab } from "@/lib/badges";
+import { CountBubble, useBadges } from "./badges";
 import { useLastWorkspace } from "./use-last-workspace";
 
 /**
@@ -14,17 +16,18 @@ export function NavLink({
   workspaceHref,
   exact,
   compact,
-  badges,
+  badge: tab,
   children,
 }: {
   href?: string;
   workspaceHref?: string;
   exact?: boolean;
   compact?: boolean;
-  /** Unread counts by account id, shown next to the link. */
-  badges?: Record<string, number>;
+  /** Which red count to show next to the link: an account tab, or the to-do list. */
+  badge?: BadgeTab | "todos";
   children: React.ReactNode;
 }) {
+  const badges = useBadges();
   const pathname = usePathname();
   const params = useParams<{ workspaceId?: string }>();
   const lastWorkspace = useLastWorkspace();
@@ -37,8 +40,16 @@ export function NavLink({
   }
   if (!target) return null;
 
-  const badge = workspaceId ? (badges?.[workspaceId] ?? 0) : 0;
   const active = exact ? pathname === target : pathname === target || pathname.startsWith(`${target}/`);
+  // "New since you looked" counts hide while you're looking; unread and due counts stay.
+  const count = !tab
+    ? 0
+    : tab === "todos"
+      ? badges.todos
+      : active && tab !== "inbox"
+        ? 0
+        : (workspaceId && badges.accounts[workspaceId]?.[tab]) || 0;
+  const label = tab === "todos" ? `${count} due` : tab ? BADGE_LABEL[tab](count) : "";
   return (
     <Link
       href={target}
@@ -49,11 +60,7 @@ export function NavLink({
       )}
     >
       {children}
-      {badge > 0 && (
-        <span className="rounded-full bg-brand-600 px-1.5 text-xs font-medium text-white" aria-label={`${badge} unread`}>
-          {badge}
-        </span>
-      )}
+      <CountBubble count={count} label={label} />
     </Link>
   );
 }
