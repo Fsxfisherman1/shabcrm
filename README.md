@@ -3,7 +3,8 @@
 A lean CRM for running an agency and its small-business clients: separate
 accounts per client, contacts with SMS consent tracking, CSV import,
 drag-and-drop pipelines, a shared text and email inbox with missed-call
-text-back, and a personal to-do list.
+text-back, online booking with calendar connections, and a personal to-do
+list.
 
 ## Run it on your computer
 
@@ -39,6 +40,50 @@ up, the caller gets the missed-call text.
 Texting rules are built in: contacts who reply STOP are never texted again
 (unless they reply START), and a contact without recorded consent can only be
 texted within 24 hours of them texting or calling you.
+
+## Calendars and booking
+
+Each account has a **Calendar** tab with its upcoming appointments, a public
+booking page (`/book/<address>`) and its connected calendars. The booking page
+only offers times inside the open hours that are free on every connected
+calendar set to "check for conflicts", and new appointments are copied to the
+calendar set to "add new appointments here".
+
+Ways to connect a calendar:
+
+| Calendar | How | Can add appointments |
+| --- | --- | --- |
+| Google Calendar | Connect button (needs the one-time setup below) | Yes |
+| Outlook / Microsoft 365 | Connect button (needs the one-time setup below) | Yes |
+| Apple iCloud, Fastmail, Nextcloud, Zoho and other CalDAV | Username and app-specific password | Yes |
+| Anything with an iCal link (including Google and Outlook) | Paste the private link | No, busy times only |
+
+Every account also gets a private feed link you can subscribe to from any
+calendar app to see its appointments there.
+
+### Connect Google Calendar (one-time setup)
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**.
+2. Under **Google Auth Platform**, set up the consent screen as **External**, then
+   **publish the app** (Audience → Publish). Left in "Testing", Google disconnects
+   calendars after 7 days. Until Google verifies the app, people connecting see an
+   "unverified app" screen; choose **Advanced → Go to (app)**.
+3. Under **Clients**, create an OAuth client of type **Web application** with the
+   redirect URI `<your app URL>/api/calendars/callback/google`.
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart.
+
+### Connect Outlook / Microsoft 365 (one-time setup)
+
+1. In [Microsoft Entra](https://entra.microsoft.com/), go to **App registrations → New registration**.
+   Choose accounts in **any organizational directory and personal Microsoft accounts**, and add a
+   **Web** redirect URI `<your app URL>/api/calendars/callback/microsoft`.
+2. Under **API permissions**, add Microsoft Graph delegated permissions `Calendars.ReadWrite`,
+   `User.Read` and `offline_access`.
+3. Under **Certificates & secrets**, create a client secret (note when it expires).
+4. Set `MICROSOFT_CLIENT_ID` (the Application ID) and `MICROSOFT_CLIENT_SECRET` and restart.
+
+Calendar passwords and tokens are encrypted with a key derived from
+`BETTER_AUTH_SECRET`; changing that secret means reconnecting calendars.
 
 ## Develop
 

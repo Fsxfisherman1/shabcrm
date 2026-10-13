@@ -7,8 +7,9 @@ import { Badge, buttonClass, Card } from "@/components/ui";
 import { contactName, formatDate, formatMoney } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { formatWhen, getBookingPage, listAppointments } from "@/server/calendars";
 import { getContact } from "@/server/contacts";
-import { ConsentForm, DeleteContactButton, EditContactForm, NoteForm } from "./forms";
+import { AppointmentForm, ConsentForm, DeleteContactButton, EditContactForm, NoteForm } from "./forms";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -20,15 +21,20 @@ const KIND_LABEL: Record<string, string> = {
   stage_changed: "Pipeline",
   consent_changed: "Consent",
   missed_call: "Call",
+  appointment: "Appointment",
 };
 
 export default async function ContactPage({ params }: { params: Promise<{ workspaceId: string; contactId: string }> }) {
   const { workspaceId, contactId } = await params;
-  await requireWorkspace(workspaceId);
+  const { workspace } = await requireWorkspace(workspaceId);
   if (!/^[0-9a-f-]{36}$/i.test(contactId)) notFound();
   const detail = await getContact(db, workspaceId, contactId);
   if (!detail) notFound();
   const { contact, timeline, deals } = detail;
+  const [upcoming, bookingPage] = await Promise.all([
+    listAppointments(db, workspaceId, { contactId: contact.id, from: new Date() }),
+    getBookingPage(db, workspaceId),
+  ]);
 
   return (
     <>
@@ -94,6 +100,26 @@ export default async function ContactPage({ params }: { params: Promise<{ worksp
               </p>
             )}
             <ConsentForm key={contact.smsConsent} workspaceId={workspaceId} contactId={contact.id} current={contact.smsConsent} />
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-3 font-semibold">Appointments</h2>
+            {upcoming.length > 0 && (
+              <ul className="mb-3 space-y-1 text-sm">
+                {upcoming.map(({ appointment: a }) => (
+                  <li key={a.id}>
+                    <span className="font-medium">{a.title}</span>
+                    <span className="block text-slate-500">{formatWhen(a.startsAt, workspace.timezone)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <AppointmentForm
+              workspaceId={workspaceId}
+              contactId={contact.id}
+              defaultTitle={bookingPage.title.startsWith("Book with ") ? "Appointment" : bookingPage.title}
+              defaultMinutes={bookingPage.durationMinutes}
+            />
           </Card>
 
           <Card className="p-5">

@@ -29,6 +29,20 @@
       "when": 1791920655353,
       "tag": "0003_messages_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791921695283,
+      "tag": "0004_calendars",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791921696764,
+      "tag": "0005_calendars_rls",
+      "breakpoints": true
     }
   ]
 }

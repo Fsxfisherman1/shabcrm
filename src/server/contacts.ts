@@ -256,7 +256,7 @@ export async function importContacts(
   return result;
 }
 
-async function findExisting(tx: Tx, email: string | null, phone: string | null): Promise<Contact | null> {
+export async function findExisting(tx: Tx, email: string | null, phone: string | null): Promise<Contact | null> {
   const conds = [];
   if (email) conds.push(sql`lower(${contacts.email}) = ${email}`);
   if (phone) conds.push(eq(contacts.phone, phone));

@@ -156,6 +156,7 @@ export const activityKind = pgEnum("activity_kind", [
   "stage_changed",
   "consent_changed",
   "missed_call",
+  "appointment",
 ]);
 
 export const activities = pgTable(
@@ -283,6 +284,92 @@ export const todos = pgTable(
   (t) => [index("todos_user_idx").on(t.userId, t.done)],
 );
 
+// ---------------------------------------------------------------------------
+// Calendars and booking
+// ---------------------------------------------------------------------------
+
+/** Mon=1 … Sun=7 (ISO weekday) → open hours as "HH:MM" pairs in the account's time zone. */
+export type WeeklyHours = Partial<Record<"1" | "2" | "3" | "4" | "5" | "6" | "7", { start: string; end: string }[]>>;
+
+/**
+ * The account's public booking page. Like `workspaces`, this is looked up by
+ * slug from the public page, so it isn't behind row-level security; it holds
+ * nothing private.
+ */
+export const bookingPages = pgTable("booking_pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .unique()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull().unique(),
+  enabled: boolean("enabled").notNull().default(false),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  bufferMinutes: integer("buffer_minutes").notNull().default(0),
+  minNoticeHours: integer("min_notice_hours").notNull().default(2),
+  maxDaysAhead: integer("max_days_ahead").notNull().default(30),
+  weeklyHours: jsonb("weekly_hours").$type<WeeklyHours>().notNull(),
+  // Secret for the read-only calendar feed other calendar apps can subscribe to.
+  feedToken: text("feed_token").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const calendarKind = pgEnum("calendar_kind", ["google", "microsoft", "caldav", "ics"]);
+
+/** An outside calendar connected to an account: checked for busy times, optionally written to. */
+export const calendars = pgTable(
+  "calendars",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: calendarKind("kind").notNull(),
+    name: text("name").notNull(),
+    // Google/Microsoft: the calendar id ("primary"); CalDAV: the calendar URL; ICS: the feed URL.
+    externalId: text("external_id").notNull(),
+    // Tokens or passwords, encrypted (see src/server/calendars/secrets.ts).
+    credentials: text("credentials"),
+    checkConflicts: boolean("check_conflicts").notNull().default(true),
+    addBookings: boolean("add_bookings").notNull().default(false),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("calendars_workspace_idx").on(t.workspaceId)],
+);
+
+export const appointmentStatus = pgEnum("appointment_status", ["booked", "canceled"]);
+
+export const appointments = pgTable(
+  "appointments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    notes: text("notes").notNull().default(""),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: appointmentStatus("status").notNull().default("booked"),
+    source: text("source").notNull().default("Manual"),
+    // Where the event was copied to, so it can be removed if canceled.
+    calendarId: uuid("calendar_id").references(() => calendars.id, { onDelete: "set null" }),
+    externalEventId: text("external_event_id"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("appointments_workspace_idx").on(t.workspaceId, t.startsAt),
+    index("appointments_contact_idx").on(t.contactId, t.startsAt),
+  ],
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Pipeline = typeof pipelines.$inferSelect;
@@ -291,3 +378,6 @@ export type Deal = typeof deals.$inferSelect;
 export type Todo = typeof todos.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type BookingPage = typeof bookingPages.$inferSelect;
+export type Calendar = typeof calendars.$inferSelect;
+export type Appointment = typeof appointments.$inferSelect;

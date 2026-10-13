@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table todos, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -158,6 +158,53 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.getByLabel("Message").fill("Hi Maria, the package is $1,200.");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText(/Email · .* · Sent/)).toBeVisible();
+
+  // Booking: open every day so there are times whenever the test runs.
+  await page.getByRole("link", { name: "Calendar" }).first().click();
+  await page.getByLabel("Accept bookings").check();
+  await page.getByLabel("Title").fill("Free consultation");
+  await page.getByLabel("Page address").fill("bright-smile-e2e");
+  await page.getByLabel("Notice (hours)").fill("0");
+  for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]) {
+    await page.getByRole("checkbox", { name: day }).check();
+    await page.getByLabel(`${day} opens`).fill("00:00");
+    await page.getByLabel(`${day} closes`).fill("23:59");
+  }
+  await page.getByRole("button", { name: "Save booking page" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await shot(page, "08-calendar-settings");
+
+  // A customer books from the public page.
+  await page.goto("/book/bright-smile-e2e");
+  await expect(page.getByRole("heading", { name: "Free consultation" })).toBeVisible();
+  await shot(page, "09-booking-page");
+  await page.locator("main button.tabular-nums").first().click();
+  await page.getByLabel("First name").fill("Pat");
+  await page.getByLabel("Last name").fill("Kim");
+  await page.getByLabel("Email").fill("pat@example.com");
+  await page.getByRole("button", { name: "Confirm booking" }).click();
+  await expect(page.getByText(/You're booked for/)).toBeVisible();
+
+  // It shows up in the CRM, as a new contact, and in the subscribe-able feed.
+  await page.goto(`${workspaceUrl}/calendar`);
+  await expect(page.getByText("Free consultation with")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Pat Kim" })).toBeVisible();
+  await expect(page.getByText("Booked online")).toBeVisible();
+  await shot(page, "10-calendar");
+  const feedUrl = await page.getByLabel("Calendar feed").inputValue();
+  const feed = await page.request.get(new URL(feedUrl).pathname);
+  expect(await feed.text()).toContain("SUMMARY:Free consultation: Pat Kim");
+
+  // Book Maria in by hand from her page.
+  await page.goto(`${workspaceUrl}/contacts`);
+  await page.getByRole("link", { name: "Maria Lopez" }).click();
+  await page.getByRole("button", { name: "Book appointment" }).click();
+  await page.getByLabel("Appointment title").fill("Whitening");
+  await page.getByLabel("Date").fill("2030-01-15");
+  await page.getByLabel("Time").fill("10:30");
+  await page.getByRole("button", { name: "Book", exact: true }).click();
+  await expect(page.getByText("Booked for Tue, Jan 15 at 10:30 AM.")).toBeVisible();
+  await expect(page.getByText('"Whitening" booked for Tue, Jan 15 at 10:30 AM')).toBeVisible();
 
   // To-do list.
   await page.getByRole("link", { name: "To-do" }).first().click();
