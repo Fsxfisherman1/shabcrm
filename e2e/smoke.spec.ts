@@ -1,4 +1,5 @@
 import path from "node:path";
+import http from "node:http";
 import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
 
@@ -239,6 +240,52 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await expect(page.getByText("website lead").first()).toBeVisible();
   await expect(page.getByText(/Filled in "Quote request"/)).toBeVisible();
   await expect(page.getByLabel("SMS consent")).toHaveValue("granted");
+
+  // A client's own website form, on another site, with the snippet pasted in.
+  await page.goto(`${workspaceUrl}/forms`);
+  const snippet = await page.getByLabel(/^Website snippet/).inputValue();
+  const webhook = await page.getByLabel(/^Webhook address/).inputValue();
+  const site = http.createServer((_req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end(`<!doctype html><title>Bright Smile</title>${snippet}
+      <form id="contact" action="/thanks" onsubmit="event.preventDefault(); document.body.append('Sent!')">
+        <label for="n">Your name</label><input id="n" name="your-name">
+        <label for="e">Email address</label><input id="e" name="your-email" type="email">
+        <label for="m">Message</label><textarea id="m" name="your-message"></textarea>
+        <button>Send message</button>
+      </form>`);
+  });
+  await new Promise<void>((resolve) => site.listen(3199, resolve));
+  try {
+    await page.goto("http://localhost:3199/contact");
+    await page.getByLabel("Your name").fill("Jordan Lee");
+    await page.getByLabel("Email address").fill("jordan@example.com");
+    await page.getByLabel("Message").fill("Do you do Saturday cleanings?");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.getByText("Sent!")).toBeVisible();
+  } finally {
+    site.close();
+  }
+  const wix = await page.request.post(webhook, {
+    data: { data: { "First name": "Priya", "Last name": "Shah", Email: "priya@example.com", "Preferred day": "Monday" } },
+  });
+  expect(wix.ok()).toBe(true);
+  await page.goto(`${workspaceUrl}/forms`);
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole("link", { name: "Form on localhost:3199/contact" })).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "Contact form" })).toBeVisible();
+  await shot(page, "16-forms-list");
+  await page.getByRole("link", { name: "Form on localhost:3199/contact" }).click();
+  await expect(page.getByText("Do you do Saturday cleanings?")).toBeVisible();
+  await page.getByLabel("Name in ShabCRM").fill("Contact page");
+  await page.getByLabel(/^Tag new leads/).fill("website lead");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await shot(page, "17-website-form");
+  await page.getByRole("link", { name: "Jordan Lee" }).click();
+  await expect(page.getByText(/Filled in "Form on localhost:3199\/contact"|Filled in "Contact page"/)).toBeVisible();
 
   // Automations: start from the missed-call template, add a step, turn it on.
   await page.getByRole("link", { name: "Automations" }).first().click();

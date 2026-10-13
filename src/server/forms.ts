@@ -152,7 +152,7 @@ export async function saveForm(db: Db, workspaceId: string, formId: string, inpu
         tags: parseTags(input.tags),
         updatedAt: new Date(),
       })
-      .where(eq(forms.id, formId))
+      .where(and(eq(forms.id, formId), eq(forms.source, "shabcrm")))
       .returning(),
   );
   if (!form) throw new FormError("Form not found.");
@@ -184,7 +184,7 @@ export async function formBySlug(db: Db, slug: string): Promise<{ form: Form; wo
     .select({ form: forms, workspace: workspaces })
     .from(forms)
     .innerJoin(workspaces, eq(workspaces.id, forms.workspaceId))
-    .where(eq(forms.slug, slug.toLowerCase()));
+    .where(and(eq(forms.slug, slug.toLowerCase()), eq(forms.source, "shabcrm")));
   return row ?? null;
 }
 
@@ -207,7 +207,7 @@ export async function submitForm(db: Db, slug: string, input: Submission) {
 
   const answers: Record<string, string> = {};
   const data: Record<string, string> = {};
-  const details: Partial<Record<(typeof CONTACT_FIELD_KINDS)[number], string>> = {};
+  const details: ContactDetails = {};
   for (const field of form.fields) {
     const value = String(input.values[field.id] ?? "").trim().slice(0, 5000);
     if (!value) {
@@ -220,6 +220,23 @@ export async function submitForm(db: Db, slug: string, input: Submission) {
     else data[answerKey(field.label)] = value;
   }
 
+  const contact = await recordSubmission(db, workspace, form, { answers, details, data, smsOptIn: input.smsOptIn, page: input.page });
+  return { form, contact };
+}
+
+type ContactDetails = Partial<Record<(typeof CONTACT_FIELD_KINDS)[number], string>>;
+
+/**
+ * Saves one response: finds or adds the contact (filling in, never
+ * overwriting), applies the form's tags and consent, and starts workflows.
+ */
+export async function recordSubmission(
+  db: Db,
+  workspace: Workspace,
+  form: Form,
+  input: { answers: Record<string, string>; details: ContactDetails; data: Record<string, string>; smsOptIn: boolean; page?: string | null },
+) {
+  const { answers, details, data } = input;
   const email = details.email ? details.email.toLowerCase() : null;
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new FormError("Please enter a valid email address.");
   const phone = details.phone ? normalizePhone(details.phone) : null;
@@ -227,7 +244,7 @@ export async function submitForm(db: Db, slug: string, input: Submission) {
   if (!email && !phone) throw new FormError("Please enter your email or phone number.");
   let firstName = details.first_name ?? "";
   let lastName = details.last_name ?? "";
-  if (details.full_name) {
+  if (details.full_name && !firstName && !lastName) {
     const [head = "", ...tail] = details.full_name.split(/\s+/);
     firstName = head;
     lastName = tail.join(" ");
@@ -235,7 +252,7 @@ export async function submitForm(db: Db, slug: string, input: Submission) {
   const source = `Form: ${form.name}`;
   const page = input.page && /^https?:\/\//.test(input.page) ? input.page.slice(0, 500) : null;
 
-  const contact = await withWorkspace(db, workspace.id, async (tx) => {
+  return withWorkspace(db, workspace.id, async (tx) => {
     let contact: Contact | null = await findExisting(tx, email, phone);
     let newTags = form.tags;
     if (!contact) {
@@ -276,5 +293,19 @@ export async function submitForm(db: Db, slug: string, input: Submission) {
     await fireTrigger(tx, workspace.id, { type: "form_submitted", contactId: contact.id, formId: form.id, data });
     return contact;
   });
-  return { form, contact };
+}
+
+/** Settings for a website's own form: its name here, whether to keep collecting it, and tags. */
+export async function saveWebsiteForm(db: Db, workspaceId: string, formId: string, input: { name: string; enabled: boolean; tags: string }) {
+  const name = input.name.trim();
+  if (!name) throw new FormError("Give the form a name.");
+  const [form] = await withWorkspace(db, workspaceId, (tx) =>
+    tx
+      .update(forms)
+      .set({ name, title: name, enabled: input.enabled, tags: parseTags(input.tags), updatedAt: new Date() })
+      .where(and(eq(forms.id, formId), eq(forms.source, "website")))
+      .returning(),
+  );
+  if (!form) throw new FormError("Form not found.");
+  return form;
 }

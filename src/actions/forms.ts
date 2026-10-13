@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { db } from "@/db";
 import { requireWorkspace } from "@/lib/session";
-import { createForm, deleteForm, FormError, saveForm, submitForm, type FormInput } from "@/server/forms";
+import { createForm, deleteForm, FormError, saveForm, saveWebsiteForm, submitForm, type FormInput } from "@/server/forms";
 import type { ActionState } from "./types";
 
 export async function createFormAction(workspaceId: string) {
@@ -17,6 +17,18 @@ export async function saveFormAction(workspaceId: string, formId: string, input:
   await requireWorkspace(workspaceId);
   try {
     await saveForm(db, workspaceId, formId, input);
+  } catch (err) {
+    if (err instanceof FormError) return { error: err.message };
+    throw err;
+  }
+  refresh();
+  return { ok: true, message: "Saved." };
+}
+
+export async function saveWebsiteFormAction(workspaceId: string, formId: string, input: { name: string; enabled: boolean; tags: string }): Promise<ActionState> {
+  await requireWorkspace(workspaceId);
+  try {
+    await saveWebsiteForm(db, workspaceId, formId, input);
   } catch (err) {
     if (err instanceof FormError) return { error: err.message };
     throw err;

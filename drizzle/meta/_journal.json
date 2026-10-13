@@ -71,6 +71,13 @@
       "when": 1791928633426,
       "tag": "0009_forms_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791929630276,
+      "tag": "0010_form_capture",
+      "breakpoints": true
     }
   ]
 }
