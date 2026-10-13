@@ -78,6 +78,13 @@
       "when": 1791929630276,
       "tag": "0010_form_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791930714226,
+      "tag": "0011_channels",
+      "breakpoints": true
     }
   ]
 }

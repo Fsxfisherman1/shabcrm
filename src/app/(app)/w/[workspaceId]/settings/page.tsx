@@ -36,12 +36,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
       </Card>
 
       <Card className="p-5">
-        <h2 className="mb-1 font-semibold">Texting and email</h2>
+        <h2 className="mb-1 font-semibold">Messaging</h2>
         <p className="mb-4 text-sm text-slate-500">
-          {config.twilio && config.postmark
-            ? "Texting (Twilio) and email (Postmark) are connected."
-            : "Test mode: fill these in now and messages are saved without being sent until Twilio and Postmark are connected."}
+          Text, iMessage, WhatsApp and email all land in the Inbox. Leave a number blank to not use that channel.
         </p>
+        <ul className="mb-4 grid gap-1 text-sm sm:grid-cols-2">
+          <Status ok={Boolean(config.twilio)} label="Text and WhatsApp (Twilio)" />
+          <Status ok={Boolean(config.sendblue)} label="iMessage (Sendblue)" />
+          <Status ok={Boolean(config.postmark)} label="Email (Postmark)" />
+        </ul>
         <MessagingForm
           workspaceId={workspaceId}
           settings={{
@@ -51,16 +54,22 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
             missedCallText: workspace.missedCallText,
             emailFromName: workspace.emailFromName ?? "",
             emailFromAddress: workspace.emailFromAddress ?? "",
+            whatsappNumber: formatPhone(workspace.whatsappNumber),
+            imessageNumber: formatPhone(workspace.imessageNumber),
           }}
         />
         <details className="mt-5 text-sm">
-          <summary className="cursor-pointer font-medium text-slate-700">Connection details for Twilio and Postmark</summary>
+          <summary className="cursor-pointer font-medium text-slate-700">Connection details for Twilio, Sendblue and Postmark</summary>
           <dl className="mt-3 space-y-3">
-            <Hook label="Twilio number: A message comes in (HTTP POST)" value={`${config.appUrl}/api/webhooks/twilio/sms`} />
+            <Hook label="Twilio number and WhatsApp sender: A message comes in (HTTP POST)" value={`${config.appUrl}/api/webhooks/twilio/sms`} />
             <Hook label="Twilio number: A call comes in (HTTP POST)" value={`${config.appUrl}/api/webhooks/twilio/voice`} />
             <Hook
               label="Postmark inbound webhook URL"
               value={`${config.appUrl}/api/webhooks/postmark/inbound?token=${config.inboundEmailSecret ?? "SET_POSTMARK_INBOUND_SECRET"}`}
+            />
+            <Hook
+              label="Sendblue receive webhook (set its secret to SENDBLUE_WEBHOOK_SECRET)"
+              value={`${config.appUrl}/api/webhooks/sendblue`}
             />
             <Hook label="Replies to this account's emails go to" value={replyToAddress(workspaceId) ?? "Set POSTMARK_INBOUND_ADDRESS first"} />
           </dl>
@@ -98,5 +107,14 @@ function Hook({ label, value }: { label: string; value: string }) {
       <dt className="text-slate-500">{label}</dt>
       <dd className="mt-0.5 break-all rounded bg-slate-50 px-2 py-1 font-mono text-xs">{value}</dd>
     </div>
+  );
+}
+
+function Status({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span className={ok ? "h-2 w-2 rounded-full bg-emerald-500" : "h-2 w-2 rounded-full bg-amber-400"} />
+      {label}: <span className={ok ? "text-emerald-700" : "text-amber-700"}>{ok ? "connected" : "test mode"}</span>
+    </li>
   );
 }

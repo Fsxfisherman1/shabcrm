@@ -1,14 +1,28 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db, Tx } from "@/db/client";
 import { activities, contacts, messages, workspaces, type Contact, type Workspace } from "@/db/schema";
 import { withWorkspace } from "@/db/tenant";
 import { normalizePhone } from "@/lib/phone";
-import type { EmailProvider, SmsProvider } from "./providers";
+import { statusToken } from "./config";
+import { ProviderError, type EmailProvider, type SmsProvider } from "./providers";
 import { fireTrigger } from "@/server/workflows/triggers";
 
 export class MessagingError extends Error {}
 
-export type Providers = { sms: SmsProvider; email: EmailProvider };
+/** WhatsApp and iMessage are optional so callers that only text and email needn't pass them. */
+export type Providers = { sms: SmsProvider; email: EmailProvider; whatsapp?: SmsProvider; imessage?: SmsProvider };
+
+export type Channel = "sms" | "email" | "whatsapp" | "imessage";
+/** Channels that reach a phone number. */
+export type PhoneChannel = Exclude<Channel, "email">;
+
+const NAME: Record<Channel, string> = { sms: "Texting", email: "Email", whatsapp: "WhatsApp", imessage: "iMessage" };
+const MAX_LENGTH: Record<PhoneChannel, number> = { sms: 1600, whatsapp: 4096, imessage: 4000 };
+const NUMBER_COLUMN = { sms: workspaces.smsNumber, whatsapp: workspaces.whatsappNumber, imessage: workspaces.imessageNumber } as const;
+
+export function channelNumber(workspace: Workspace, channel: PhoneChannel): string | null {
+  return channel === "sms" ? workspace.smsNumber : channel === "whatsapp" ? workspace.whatsappNumber : workspace.imessageNumber;
+}
 
 /** How long after a contact texts or calls us we may text them back without stored consent. */
 export const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -40,11 +54,49 @@ export function textPermission(contact: Contact, lastInboundAt: Date | null, now
   };
 }
 
+/**
+ * WhatsApp only lets a business message someone within 24 hours of their last
+ * WhatsApp message to it (anything later needs a template Meta has approved).
+ */
+export function whatsappPermission(
+  contact: Contact,
+  lastWhatsApp: { at: Date; body: string } | null,
+  now = new Date(),
+): TextPermission {
+  if (!contact.phone) return { allowed: false, reason: "This contact has no mobile number." };
+  if (!lastWhatsApp || now.getTime() - lastWhatsApp.at.getTime() >= REPLY_WINDOW_MS) {
+    return {
+      allowed: false,
+      reason: "WhatsApp only lets businesses reply within 24 hours of the customer's last WhatsApp message. Text or email them instead.",
+    };
+  }
+  if (STOP_WORDS.has(keywordOf(lastWhatsApp.body))) return { allowed: false, reason: "They asked you to stop on WhatsApp." };
+  return { allowed: true, reason: "reply_window" };
+}
+
+const keywordOf = (body: string) => body.trim().toLowerCase().replace(/[^a-z]/g, "");
+
+async function lastWhatsApp(tx: Tx, contactId: string) {
+  const [msg] = await tx
+    .select({ at: messages.createdAt, body: messages.body })
+    .from(messages)
+    .where(and(eq(messages.contactId, contactId), eq(messages.channel, "whatsapp"), eq(messages.direction, "inbound")))
+    .orderBy(desc(messages.createdAt))
+    .limit(1);
+  return msg ?? null;
+}
+
+/** Permission for each phone channel. Texts and iMessages share consent: both are texting a phone number. */
+async function phonePermissions(tx: Tx, contact: Contact) {
+  const text = textPermission(contact, await lastInboundAt(tx, contact.id));
+  return { sms: text, imessage: text, whatsapp: whatsappPermission(contact, await lastWhatsApp(tx, contact.id)) };
+}
+
 async function lastInboundAt(tx: Tx, contactId: string): Promise<Date | null> {
   const [msg] = await tx
     .select({ at: messages.createdAt })
     .from(messages)
-    .where(and(eq(messages.contactId, contactId), eq(messages.channel, "sms"), eq(messages.direction, "inbound")))
+    .where(and(eq(messages.contactId, contactId), inArray(messages.channel, ["sms", "imessage"]), eq(messages.direction, "inbound")))
     .orderBy(desc(messages.createdAt))
     .limit(1);
   const [call] = await tx
@@ -63,7 +115,7 @@ async function lastInboundAt(tx: Tx, contactId: string): Promise<Date | null> {
 
 export type SendInput = {
   contactId: string;
-  channel: "sms" | "email";
+  channel: Channel;
   body: string;
   subject?: string;
 };
@@ -78,7 +130,9 @@ export async function sendMessage(
 ) {
   const body = input.body.trim();
   if (!body) throw new MessagingError("Write a message first.");
-  if (input.channel === "sms" && body.length > 1600) throw new MessagingError("Texts can be up to 1,600 characters.");
+  if (input.channel !== "email" && body.length > MAX_LENGTH[input.channel]) {
+    throw new MessagingError(`${NAME[input.channel]} messages can be up to ${MAX_LENGTH[input.channel].toLocaleString("en-US")} characters.`);
+  }
 
   // 1. Check the rules and record the message as queued.
   const { message, workspace } = await withWorkspace(db, workspaceId, async (tx) => {
@@ -88,11 +142,18 @@ export async function sendMessage(
 
     let from: string;
     let to: string;
-    if (input.channel === "sms") {
-      if (!workspace.smsNumber) throw new MessagingError("Set up a texting number for this account in Settings first.");
-      const permission = textPermission(contact, await lastInboundAt(tx, contact.id));
+    if (input.channel !== "email") {
+      const number = channelNumber(workspace, input.channel);
+      if (!number) {
+        throw new MessagingError(
+          input.channel === "sms"
+            ? "Set up a texting number for this account in Settings first."
+            : `Set up ${input.channel === "imessage" ? "an" : "a"} ${NAME[input.channel]} number for this account in Settings first.`,
+        );
+      }
+      const permission = (await phonePermissions(tx, contact))[input.channel];
       if (!permission.allowed) throw new MessagingError(permission.reason);
-      from = workspace.smsNumber;
+      from = number;
       to = contact.phone!;
     } else {
       if (!workspace.emailFromAddress) throw new MessagingError("Set a from email address for this account in Settings first.");
@@ -121,18 +182,19 @@ export async function sendMessage(
     return { message, workspace };
   });
 
-  // 2. Hand it to Twilio or Postmark, outside the transaction.
+  // 2. Hand it to Twilio, Sendblue or Postmark, outside the transaction.
   let update: Partial<typeof messages.$inferInsert>;
   try {
-    const result =
-      message.channel === "sms"
-        ? await providers.sms.sendSms({
-            from: message.fromAddress,
-            to: message.toAddress,
-            body,
-            statusCallback: opts.appUrl ? `${opts.appUrl}/api/webhooks/twilio/status?w=${workspaceId}` : undefined,
-          })
-        : await providers.email.sendEmail({
+    const phone = message.channel === "email" ? null : providers[message.channel];
+    if (message.channel !== "email" && !phone) throw new ProviderError(`${NAME[message.channel]} isn't connected.`);
+    const statusCallback = !opts.appUrl
+      ? undefined
+      : message.channel === "imessage"
+        ? `${opts.appUrl}/api/webhooks/sendblue/status?w=${workspaceId}&t=${statusToken(workspaceId)}`
+        : `${opts.appUrl}/api/webhooks/twilio/status?w=${workspaceId}`;
+    const result = phone
+      ? await phone.sendSms({ from: message.fromAddress, to: message.toAddress, body, statusCallback })
+      : await providers.email.sendEmail({
             fromName: workspace.emailFromName,
             from: message.fromAddress,
             to: message.toAddress,
@@ -152,7 +214,7 @@ export async function sendMessage(
   return saved;
 }
 
-/** Applies a Twilio delivery status callback. */
+/** Applies a Twilio delivery status callback (texts and WhatsApp). */
 export async function updateSmsStatus(
   db: Db,
   workspaceId: string,
@@ -161,18 +223,28 @@ export async function updateSmsStatus(
   errorCode?: string | null,
 ) {
   const status =
-    twilioStatus === "delivered"
+    twilioStatus === "delivered" || twilioStatus === "read"
       ? "delivered"
       : twilioStatus === "failed" || twilioStatus === "undelivered"
         ? "failed"
         : twilioStatus === "sent"
           ? "sent"
           : null;
-  if (!status) return;
+  if (status) await setOutboundStatus(db, workspaceId, providerId, status, `Carrier error ${errorCode ?? "unknown"}`);
+}
+
+/** Applies a Sendblue delivery update (iMessage). */
+export async function updateIMessageStatus(db: Db, workspaceId: string, providerId: string, sendblueStatus: string, error?: string | null) {
+  const s = sendblueStatus.toUpperCase();
+  const status = s === "DELIVERED" ? "delivered" : s === "SENT" ? "sent" : s === "ERROR" || s === "DECLINED" ? "failed" : null;
+  if (status) await setOutboundStatus(db, workspaceId, providerId, status, error || "Not delivered");
+}
+
+async function setOutboundStatus(db: Db, workspaceId: string, providerId: string, status: "sent" | "delivered" | "failed", error: string) {
   await withWorkspace(db, workspaceId, (tx) =>
     tx
       .update(messages)
-      .set({ status, error: status === "failed" ? `Carrier error ${errorCode ?? "unknown"}` : null })
+      .set({ status, error: status === "failed" ? error : null })
       .where(and(eq(messages.providerId, providerId), eq(messages.direction, "outbound"))),
   );
 }
@@ -182,8 +254,12 @@ export async function updateSmsStatus(
 // ---------------------------------------------------------------------------
 
 export async function workspaceBySmsNumber(db: Db, number: string): Promise<Workspace | null> {
+  return workspaceByNumber(db, "sms", number);
+}
+
+export async function workspaceByNumber(db: Db, channel: PhoneChannel, number: string): Promise<Workspace | null> {
   const e164 = normalizePhone(number) ?? number;
-  const [ws] = await db.select().from(workspaces).where(eq(workspaces.smsNumber, e164));
+  const [ws] = await db.select().from(workspaces).where(eq(NUMBER_COLUMN[channel], e164));
   return ws ?? null;
 }
 
@@ -202,7 +278,17 @@ export async function receiveSms(
   db: Db,
   input: { from: string; to: string; body: string; providerId?: string },
 ): Promise<InboundSmsResult> {
-  const workspace = await workspaceBySmsNumber(db, input.to);
+  return receivePhoneMessage(db, { ...input, channel: "sms" });
+}
+
+const INBOUND_SOURCE: Record<PhoneChannel, string> = { sms: "Inbound text", whatsapp: "WhatsApp", imessage: "iMessage" };
+
+/** A text, WhatsApp or iMessage from a contact, matched to the account by the number it was sent to. */
+export async function receivePhoneMessage(
+  db: Db,
+  input: { channel: PhoneChannel; from: string; to: string; body: string; providerId?: string },
+): Promise<InboundSmsResult> {
+  const workspace = await workspaceByNumber(db, input.channel, input.to);
   const from = normalizePhone(input.from) ?? input.from;
   if (!workspace) return null;
 
@@ -211,46 +297,61 @@ export async function receiveSms(
       const [dupe] = await tx.select({ id: messages.id }).from(messages).where(eq(messages.providerId, input.providerId));
       if (dupe) return null; // Twilio retried a webhook we already handled.
     }
-    const contact = await findOrCreateByPhone(tx, workspace.id, from, "Inbound text");
+    const contact = await findOrCreateByPhone(tx, workspace.id, from, INBOUND_SOURCE[input.channel]);
     await tx.insert(messages).values({
       workspaceId: workspace.id,
       contactId: contact.id,
-      channel: "sms",
+      channel: input.channel,
       direction: "inbound",
       status: "received",
       body: input.body,
       fromAddress: from,
-      toAddress: workspace.smsNumber!,
+      toAddress: channelNumber(workspace, input.channel)!,
       providerId: input.providerId ?? null,
     });
 
-    const keyword = input.body.trim().toLowerCase().replace(/[^a-z]/g, "");
+    // STOP and START by text or iMessage change text consent. On WhatsApp,
+    // STOP just closes the conversation (see whatsappPermission).
+    const keyword = keywordOf(input.body);
+    const how = input.channel === "imessage" ? "iMessage" : "text";
     let optedOut = false;
     let optedIn = false;
-    if (STOP_WORDS.has(keyword) && contact.smsConsent !== "revoked") {
+    if (input.channel === "whatsapp") {
+      // nothing to change
+    } else if (STOP_WORDS.has(keyword) && contact.smsConsent !== "revoked") {
       optedOut = true;
       await tx
         .update(contacts)
-        .set({ smsConsent: "revoked", smsConsentSource: `Texted ${keyword.toUpperCase()}`, smsConsentAt: new Date(), updatedAt: new Date() })
+        .set({
+          smsConsent: "revoked",
+          smsConsentSource: `${how === "text" ? "Texted" : "Sent by iMessage"} ${keyword.toUpperCase()}`,
+          smsConsentAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(contacts.id, contact.id));
       await tx.insert(activities).values({
         workspaceId: workspace.id,
         contactId: contact.id,
         kind: "consent_changed",
-        body: `Opted out of texts by replying ${keyword.toUpperCase()}`,
+        body: `Opted out of texts by replying ${keyword.toUpperCase()}${how === "text" ? "" : " by iMessage"}`,
       });
     } else if (START_WORDS.has(keyword) && contact.smsConsent === "revoked") {
       // The contact themselves opting back in is the one way out of "revoked".
       optedIn = true;
       await tx
         .update(contacts)
-        .set({ smsConsent: "granted", smsConsentSource: `Texted ${keyword.toUpperCase()}`, smsConsentAt: new Date(), updatedAt: new Date() })
+        .set({
+          smsConsent: "granted",
+          smsConsentSource: `${how === "text" ? "Texted" : "Sent by iMessage"} ${keyword.toUpperCase()}`,
+          smsConsentAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(contacts.id, contact.id));
       await tx.insert(activities).values({
         workspaceId: workspace.id,
         contactId: contact.id,
         kind: "consent_changed",
-        body: `Opted back in to texts by replying ${keyword.toUpperCase()}`,
+        body: `Opted back in to texts by replying ${keyword.toUpperCase()}${how === "text" ? "" : " by iMessage"}`,
       });
     }
     await fireTrigger(tx, workspace.id, { type: "sms_received", contactId: contact.id, body: input.body });
@@ -343,7 +444,7 @@ export async function handleCallEnded(
 // Inbox
 // ---------------------------------------------------------------------------
 
-export async function listConversations(db: Db, workspaceId: string, opts: { unreadOnly?: boolean } = {}) {
+export async function listConversations(db: Db, workspaceId: string, opts: { unreadOnly?: boolean; channel?: Channel } = {}) {
   return withWorkspace(db, workspaceId, async (tx) => {
     const rows = await tx.execute<{
       contact_id: string;
@@ -351,7 +452,7 @@ export async function listConversations(db: Db, workspaceId: string, opts: { unr
       last_name: string;
       email: string | null;
       phone: string | null;
-      channel: "sms" | "email";
+      channel: Channel;
       direction: "inbound" | "outbound";
       body: string;
       status: string;
@@ -365,6 +466,7 @@ export async function listConversations(db: Db, workspaceId: string, opts: { unr
           where u.contact_id = m.contact_id and u.direction = 'inbound' and u.read_at is null) as unread
       from messages m
       join contacts c on c.id = m.contact_id
+      ${opts.channel ? sql`where m.channel = ${opts.channel}` : sql``}
       order by m.contact_id, m.created_at desc
     `);
     return [...rows]
@@ -381,8 +483,8 @@ export async function getConversation(db: Db, workspaceId: string, contactId: st
     const [contact] = await tx.select().from(contacts).where(eq(contacts.id, contactId));
     if (!contact) return null;
     const thread = await tx.select().from(messages).where(eq(messages.contactId, contactId)).orderBy(asc(messages.createdAt));
-    const permission = textPermission(contact, await lastInboundAt(tx, contactId));
-    return { contact, messages: thread, textPermission: permission };
+    const permissions = await phonePermissions(tx, contact);
+    return { contact, messages: thread, textPermission: permissions.sms, permissions };
   });
 }
 
@@ -415,6 +517,8 @@ export async function updateMessagingSettings(
     missedCallText: string;
     emailFromName: string | null;
     emailFromAddress: string | null;
+    whatsappNumber: string | null;
+    imessageNumber: string | null;
   },
 ) {
   await db.update(workspaces).set(input).where(eq(workspaces.id, workspaceId));

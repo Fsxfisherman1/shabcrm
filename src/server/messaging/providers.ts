@@ -11,8 +11,9 @@ export type SendEmailInput = {
 };
 export type SendResult = { providerId: string; status: "queued" | "sent" };
 
+/** Anything that sends a plain message to a phone number: SMS, WhatsApp, iMessage. */
 export interface SmsProvider {
-  readonly name: "twilio" | "test";
+  readonly name: "twilio" | "twilio-whatsapp" | "sendblue" | "test";
   sendSms(input: SendSmsInput): Promise<SendResult>;
 }
 
@@ -69,6 +70,57 @@ export function validateTwilioSignature(
   const expected = createHmac("sha1", authToken).update(data, "utf8").digest("base64");
   const a = Buffer.from(expected);
   const b = Buffer.from(signature);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * WhatsApp through Twilio: the same Messages API, with "whatsapp:" in front of
+ * both numbers. Replies come to the same webhook as texts.
+ * https://www.twilio.com/docs/whatsapp/api
+ */
+export class TwilioWhatsApp implements SmsProvider {
+  readonly name = "twilio-whatsapp" as const;
+  private twilio: TwilioSms;
+  constructor(accountSid: string, authToken: string) {
+    this.twilio = new TwilioSms(accountSid, authToken);
+  }
+
+  sendSms({ from, to, ...rest }: SendSmsInput): Promise<SendResult> {
+    return this.twilio.sendSms({ from: `whatsapp:${from}`, to: `whatsapp:${to}`, ...rest });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sendblue (iMessage, falling back to SMS for people without an iPhone)
+// https://docs.sendblue.com/api/resources/messages/methods/send
+// ---------------------------------------------------------------------------
+
+export class SendblueIMessage implements SmsProvider {
+  readonly name = "sendblue" as const;
+  constructor(
+    private apiKey: string,
+    private apiSecret: string,
+  ) {}
+
+  async sendSms({ from, to, body, statusCallback }: SendSmsInput): Promise<SendResult> {
+    const res = await fetch("https://api.sendblue.co/api/send-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "sb-api-key-id": this.apiKey, "sb-api-secret-key": this.apiSecret },
+      body: JSON.stringify({ from_number: from, number: to, content: body, status_callback: statusCallback }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { message_handle?: string; status?: string; error_message?: string; message?: string };
+    if (!res.ok || !json.message_handle || json.status === "ERROR" || json.status === "DECLINED") {
+      throw new ProviderError(json.error_message ?? json.message ?? `Sendblue error ${res.status}`);
+    }
+    return { providerId: json.message_handle, status: json.status === "SENT" || json.status === "DELIVERED" ? "sent" : "queued" };
+  }
+}
+
+/** Sendblue sends the webhook secret you set as-is in the sb-signing-secret header. */
+export function validateSharedSecret(expected: string, received: string | null): boolean {
+  if (!received) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 

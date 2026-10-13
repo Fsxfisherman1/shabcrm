@@ -2,8 +2,8 @@
 
 A lean CRM for running an agency and its small-business clients: separate
 accounts per client, contacts with SMS consent tracking, CSV import,
-drag-and-drop pipelines, a shared text and email inbox with missed-call
-text-back, online booking with calendar connections, website lead forms,
+drag-and-drop pipelines, a shared inbox for texts, iMessage, WhatsApp and
+email with missed-call text-back, online booking with calendar connections, website lead forms,
 workflow automations, and a personal to-do list.
 
 ## Run it on your computer
@@ -23,23 +23,37 @@ Your data lives in a Docker volume, so it survives restarts. Stop with
 `Ctrl+C`, start again with `docker compose up`. To wipe everything and start
 fresh: `docker compose down -v`.
 
-## Texting and email
+## Inbox: texts, iMessage, WhatsApp and email
 
-Until Twilio and Postmark keys are set, the app runs in **test mode**: you can
+Every conversation with a contact is in one thread on the **Inbox** tab,
+whichever app they used, with a filter per channel. Replies go out the way
+they last wrote, or pick another channel above the message box.
+
+Until a service's keys are set, its channel runs in **test mode**: you can
 send messages from the inbox and they are saved, but nothing goes out. The
 inbox has a "Pretend a customer messaged you" button for trying replies,
-emails and missed calls.
+emails, WhatsApp and iMessage, and missed calls.
 
-To go live, set the variables in `.env.example` (`TWILIO_*`, `POSTMARK_*`),
-then for each account open **Settings → Texting and email**, enter its Twilio
-number, and paste the webhook URLs shown there into Twilio (the number's
-"A message comes in" and "A call comes in") and Postmark (inbound webhook).
+To go live, set the variables in `.env.example` (`TWILIO_*`, `POSTMARK_*`,
+`SENDBLUE_*`), then for each account open **Settings → Messaging**, enter its
+numbers, and paste the webhook URLs shown there into Twilio (the number's
+"A message comes in" and "A call comes in"), Postmark (inbound webhook) and
+Sendblue (receive webhook).
+
+- **Text and calls:** a Twilio number.
+- **WhatsApp:** a WhatsApp sender approved in the same Twilio account (Twilio
+  walks you through Meta's business check). Point its "A message comes in" at
+  the same URL as texts. WhatsApp only allows replies within 24 hours of the
+  customer's last WhatsApp message, so the inbox offers WhatsApp only then.
+- **iMessage:** a Sendblue line per account. Sendblue sends real iMessages,
+  and regular texts to people without an iPhone. Set its webhook secret to
+  `SENDBLUE_WEBHOOK_SECRET`. iMessage follows the same consent rules as texts.
 Calls to the Twilio number ring the "Forward calls to" phone; if nobody picks
 up, the caller gets the missed-call text.
 
-Texting rules are built in: contacts who reply STOP are never texted again
-(unless they reply START), and a contact without recorded consent can only be
-texted within 24 hours of them texting or calling you.
+Texting rules are built in: contacts who reply STOP (by text or iMessage) are
+never texted again (unless they reply START), and a contact without recorded
+consent can only be texted within 24 hours of them texting or calling you.
 
 ## Forms
 

@@ -21,7 +21,7 @@ export const TRIGGER_HELP: Record<WorkflowTrigger["type"], string> = {
   manual: "You add contacts yourself, from this page.",
   contact_created: "Anyone added: by hand, a booking, a text or email, or another app.",
   tag_added: "A contact gets a certain tag.",
-  sms_received: "A contact texts in, optionally with a keyword.",
+  sms_received: "A contact texts in by text, iMessage or WhatsApp, optionally with a keyword.",
   email_received: "A contact emails in.",
   missed_call: "Someone calls and nobody picks up.",
   appointment_booked: "An appointment is booked, online or by you.",
