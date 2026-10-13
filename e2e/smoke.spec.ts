@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -205,6 +205,45 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.getByRole("button", { name: "Book", exact: true }).click();
   await expect(page.getByText("Booked for Tue, Jan 15 at 10:30 AM.")).toBeVisible();
   await expect(page.getByText('"Whitening" booked for Tue, Jan 15 at 10:30 AM')).toBeVisible();
+
+  // Automations: start from the missed-call template, add a step, turn it on.
+  await page.getByRole("link", { name: "Automations" }).first().click();
+  await expect(page.getByText("No workflows yet")).toBeVisible();
+  await page.getByRole("button", { name: "New workflow" }).click();
+  await page.getByRole("button", { name: /Missed call text back/ }).click();
+  await expect(page.getByLabel("Workflow name")).toHaveValue("Missed call text back");
+  await page.getByRole("button", { name: "Add a step" }).last().click();
+  await page.getByRole("menuitem", { name: "Add tag" }).click();
+  await expect(page.getByRole("button", { name: /Add tag Choose a tag/ })).toBeVisible();
+  await page.getByLabel("Tag", { exact: true }).fill("missed call");
+  await page.getByRole("button", { name: /Missed call Someone calls/ }).click();
+  await expect(page.getByLabel("Event")).toHaveValue("missed_call");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved. It's off until you turn it on.")).toBeVisible();
+  await page.getByRole("switch", { name: "Turn workflow on" }).click();
+  await expect(page.getByText("Saved. It's on.")).toBeVisible();
+  await shot(page, "11-workflow-builder");
+  const workflowUrl = page.url();
+
+  // A missed call comes in, and the workflow texts them back on its own.
+  await page.goto(`${workspaceUrl}/inbox`);
+  await page.getByRole("button", { name: "Pretend a customer messaged you" }).click();
+  await page.getByLabel("What happens").selectOption("call");
+  await page.getByLabel("From").fill("(415) 555-0188");
+  await page.getByRole("button", { name: "Simulate" }).click();
+  await page.goto(workflowUrl);
+  await page.getByRole("tab", { name: /History/ }).click();
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole("tab", { name: /History/ }).click();
+    await expect(page.getByRole("link", { name: /555.?0188/ })).toBeVisible({ timeout: 1000 });
+    await expect(page.getByText("Sent text")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 30_000 });
+  await expect(page.getByText(/Waiting until/)).toBeVisible();
+  await shot(page, "12-workflow-history");
+  await page.goto(`${workspaceUrl}/automations`);
+  await expect(page.getByRole("link", { name: "Missed call text back" })).toBeVisible();
+  await shot(page, "13-automations");
 
   // To-do list.
   await page.getByRole("link", { name: "To-do" }).first().click();

@@ -3,6 +3,7 @@ import type { Db, Tx } from "@/db/client";
 import { activities, contacts, deals, type Contact } from "@/db/schema";
 import { withWorkspace } from "@/db/tenant";
 import { normalizePhone } from "@/lib/phone";
+import { fireTrigger } from "@/server/workflows/triggers";
 
 export type ContactInput = {
   firstName?: string;
@@ -115,6 +116,8 @@ export async function createContact(
       body: data.source ? `Added from ${data.source}` : "Contact added",
       createdBy: userId,
     });
+    await fireTrigger(tx, workspaceId, { type: "contact_created", contactId: contact.id });
+    for (const tag of contact.tags) await fireTrigger(tx, workspaceId, { type: "tag_added", contactId: contact.id, tag });
     return contact;
   });
 }
@@ -131,11 +134,17 @@ export async function updateContact(
     if (dupe && dupe.id !== contactId) {
       throw new DuplicateContactError("Another contact already uses that email or phone.");
     }
+    const [before] = await tx.select({ tags: contacts.tags }).from(contacts).where(eq(contacts.id, contactId));
     const [contact] = await tx
       .update(contacts)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(contacts.id, contactId))
       .returning();
+    if (contact) {
+      for (const tag of contact.tags.filter((t) => !before?.tags.includes(t))) {
+        await fireTrigger(tx, workspaceId, { type: "tag_added", contactId, tag });
+      }
+    }
     return contact ?? null;
   });
 }
