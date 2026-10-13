@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createAppointmentAction } from "@/actions/calendar";
 import { addNoteAction, deleteContactAction, setConsentAction, updateContactAction } from "@/actions/contacts";
 import { ContactFields } from "@/components/contact-fields";
 import { Button, FormError, Input, Select, Textarea } from "@/components/ui";
@@ -84,5 +85,57 @@ export function DeleteContactButton({ workspaceId, contactId }: { workspaceId: s
     >
       Delete contact
     </Button>
+  );
+}
+
+export function AppointmentForm({
+  workspaceId,
+  contactId,
+  defaultTitle,
+  defaultMinutes,
+}: {
+  workspaceId: string;
+  contactId: string;
+  defaultTitle: string;
+  defaultMinutes: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, onSubmit, pending] = useActionForm(createAppointmentAction.bind(null, workspaceId, contactId), {
+    onSuccess: () => setOpen(false),
+  });
+  if (!open) {
+    return (
+      <>
+        {state.ok && <p className="mb-2 text-sm text-emerald-600">{state.message}</p>}
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)}>
+          Book appointment
+        </Button>
+      </>
+    );
+  }
+  return (
+    <form onSubmit={onSubmit} className="space-y-2">
+      <Input name="title" aria-label="Appointment title" defaultValue={defaultTitle} required />
+      <div className="grid grid-cols-2 gap-2">
+        <Input name="date" type="date" aria-label="Date" required />
+        <Input name="time" type="time" aria-label="Time" step={300} required />
+      </div>
+      <Select name="durationMinutes" aria-label="Length" defaultValue={String(defaultMinutes)}>
+        {[...new Set([15, 30, 45, 60, 90, 120, defaultMinutes])].sort((a, b) => a - b).map((m) => (
+          <option key={m} value={m}>
+            {m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? "" : "s"}`}
+          </option>
+        ))}
+      </Select>
+      <FormError message={state.error} />
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          Book
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

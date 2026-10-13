@@ -62,6 +62,7 @@ function WorkspaceNav({ unread }: { unread: Record<string, number> }) {
       <NavLink workspaceHref="/inbox" badges={unread}>
         Inbox
       </NavLink>
+      <NavLink workspaceHref="/calendar">Calendar</NavLink>
       <NavLink workspaceHref="/contacts">Contacts</NavLink>
       <NavLink workspaceHref="/pipeline">Pipeline</NavLink>
       <NavLink workspaceHref="/settings">Settings</NavLink>
@@ -93,6 +94,9 @@ function MobileBar({
         </NavLink>
         <NavLink workspaceHref="/inbox" compact badges={unread}>
           Inbox
+        </NavLink>
+        <NavLink workspaceHref="/calendar" compact>
+          Calendar
         </NavLink>
         <NavLink workspaceHref="/contacts" compact>
           Contacts

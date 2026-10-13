@@ -43,6 +43,11 @@ services:
       POSTMARK_SERVER_TOKEN: ${POSTMARK_SERVER_TOKEN:-}
       POSTMARK_INBOUND_ADDRESS: ${POSTMARK_INBOUND_ADDRESS:-}
       POSTMARK_INBOUND_SECRET: ${POSTMARK_INBOUND_SECRET:-}
+      # Leave unset until Google / Microsoft calendar connections are set up (see README).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
