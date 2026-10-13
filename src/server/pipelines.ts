@@ -2,11 +2,21 @@ import { and, asc, count, eq, gt, gte, sql, sum } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { activities, contacts, deals, pipelines, pipelineStages } from "@/db/schema";
 import { withWorkspace } from "@/db/tenant";
+import { fireTrigger } from "@/server/workflows/triggers";
 
 export async function listPipelines(db: Db, workspaceId: string) {
   return withWorkspace(db, workspaceId, (tx) =>
     tx.select().from(pipelines).orderBy(asc(pipelines.position), asc(pipelines.createdAt)),
   );
+}
+
+/** Every pipeline with its stages, for pickers. */
+export async function listPipelinesWithStages(db: Db, workspaceId: string) {
+  return withWorkspace(db, workspaceId, async (tx) => {
+    const list = await tx.select().from(pipelines).orderBy(asc(pipelines.position), asc(pipelines.createdAt));
+    const stages = await tx.select().from(pipelineStages).orderBy(asc(pipelineStages.position));
+    return list.map((p) => ({ id: p.id, name: p.name, stages: stages.filter((s) => s.pipelineId === p.id).map((s) => ({ id: s.id, name: s.name })) }));
+  });
 }
 
 export async function getBoard(db: Db, workspaceId: string, pipelineId: string) {
@@ -143,6 +153,7 @@ export async function createDeal(
         body: `Deal "${deal.title}" added to ${stage.name}`,
         createdBy: userId,
       });
+      await fireTrigger(tx, workspaceId, { type: "deal_stage_changed", contactId: deal.contactId, dealId: deal.id, stageId: stage.id });
     }
     return deal;
   });
@@ -188,6 +199,7 @@ export async function moveDeal(
         body: `"${deal.title}" moved to ${target.name}`,
         createdBy: userId,
       });
+      await fireTrigger(tx, workspaceId, { type: "deal_stage_changed", contactId: deal.contactId, dealId, stageId });
     }
   });
 }
@@ -199,11 +211,15 @@ export async function updateDeal(
   input: { title?: string; valueCents?: number; status?: "open" | "won" | "lost"; contactId?: string | null },
 ) {
   return withWorkspace(db, workspaceId, async (tx) => {
+    const [before] = await tx.select({ status: deals.status }).from(deals).where(eq(deals.id, dealId));
     const [deal] = await tx
       .update(deals)
       .set({ ...input, title: input.title?.trim(), updatedAt: new Date() })
       .where(eq(deals.id, dealId))
       .returning();
+    if (deal?.contactId && before && deal.status !== before.status) {
+      await fireTrigger(tx, workspaceId, { type: "deal_status_changed", contactId: deal.contactId, dealId, status: deal.status });
+    }
     return deal ?? null;
   });
 }

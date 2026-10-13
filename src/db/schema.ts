@@ -370,6 +370,141 @@ export const appointments = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Workflow automations
+// ---------------------------------------------------------------------------
+
+export type WorkflowTrigger =
+  | { type: "manual" }
+  | { type: "contact_created" }
+  | { type: "tag_added"; tag: string }
+  | { type: "sms_received"; keyword?: string }
+  | { type: "email_received" }
+  | { type: "missed_call" }
+  | { type: "appointment_booked" }
+  | { type: "appointment_canceled" }
+  | { type: "deal_stage_changed"; stageId: string }
+  | { type: "deal_status_changed"; status: "won" | "lost" }
+  | { type: "webhook" };
+
+export type WorkflowCondition =
+  | { type: "has_tag"; tag: string }
+  | { type: "replied" }
+  | { type: "has_upcoming_appointment" }
+  | { type: "text_consent" }
+  | { type: "has_email" }
+  | { type: "has_phone" };
+
+export type WorkflowStep = { id: string } & (
+  | { type: "send_sms"; body: string }
+  | { type: "send_email"; subject: string; body: string }
+  | { type: "wait"; amount: number; unit: "minutes" | "hours" | "days" }
+  | { type: "wait_until_appointment"; hoursBefore: number }
+  | { type: "add_tag"; tag: string }
+  | { type: "remove_tag"; tag: string }
+  | { type: "create_deal"; pipelineId: string; stageId: string; title: string; value: number }
+  | { type: "move_deal"; stageId: string }
+  | { type: "create_todo"; title: string; dueInDays: number }
+  | { type: "notify"; channel: "email" | "sms"; to: string; message: string }
+  | { type: "add_note"; body: string }
+  | { type: "webhook"; url: string }
+  | { type: "if"; condition: WorkflowCondition; then: WorkflowStep[]; else: WorkflowStep[] }
+);
+
+export const workflows = pgTable(
+  "workflows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    trigger: jsonb("trigger").$type<WorkflowTrigger>().notNull(),
+    steps: jsonb("steps").$type<WorkflowStep[]>().notNull().default([]),
+    // Stop a contact's run when they text or email back.
+    stopOnReply: boolean("stop_on_reply").notNull().default(true),
+    // Let a contact go through again while (or after) they've been through once.
+    allowReentry: boolean("allow_reentry").notNull().default(false),
+    // Secret for the "data sent in" (webhook) trigger URL.
+    hookToken: text("hook_token").notNull().unique(),
+    // To-dos the workflow creates go to this person.
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("workflows_workspace_idx").on(t.workspaceId)],
+);
+
+export const workflowRunStatus = pgEnum("workflow_run_status", ["active", "waiting", "completed", "stopped", "failed"]);
+
+/** One contact's trip through a workflow. */
+export const workflowRuns = pgTable(
+  "workflow_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    status: workflowRunStatus("status").notNull().default("active"),
+    // The id of the next step to run; null when finished.
+    nextStepId: text("next_step_id"),
+    wakeAt: timestamp("wake_at", { withTimezone: true }),
+    // What started it (e.g. the appointment, the text, data sent in).
+    context: jsonb("context").$type<Record<string, unknown>>().notNull().default({}),
+    note: text("note"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("workflow_runs_workflow_idx").on(t.workflowId, t.startedAt),
+    index("workflow_runs_contact_idx").on(t.contactId, t.status),
+  ],
+);
+
+export const workflowRunLogs = pgTable(
+  "workflow_run_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    stepId: text("step_id"),
+    outcome: text("outcome").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("workflow_run_logs_run_idx").on(t.runId, t.createdAt)],
+);
+
+/**
+ * Which runs are due, across all accounts. The background worker needs to find
+ * them before it knows which account to switch into, so this holds only ids and
+ * times, and has no row-level security.
+ */
+export const workflowQueue = pgTable(
+  "workflow_queue",
+  {
+    runId: uuid("run_id")
+      .primaryKey()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    wakeAt: timestamp("wake_at", { withTimezone: true }).notNull(),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (t) => [index("workflow_queue_wake_idx").on(t.wakeAt)],
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Pipeline = typeof pipelines.$inferSelect;
@@ -381,3 +516,5 @@ export type Message = typeof messages.$inferSelect;
 export type BookingPage = typeof bookingPages.$inferSelect;
 export type Calendar = typeof calendars.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
+export type Workflow = typeof workflows.$inferSelect;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;

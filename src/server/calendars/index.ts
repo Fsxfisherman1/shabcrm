@@ -25,6 +25,7 @@ import type { ProviderFactory } from "./config";
 import { buildIcs } from "./ics";
 import { CalendarError, type OAuthTokens } from "./providers";
 import { encryptJson } from "./secrets";
+import { fireTrigger } from "@/server/workflows/triggers";
 
 export class BookingError extends Error {}
 
@@ -334,6 +335,7 @@ export async function bookAppointment(db: Db, slug: string, input: BookingInput,
         })
         .returning();
       await tx.insert(activities).values({ workspaceId: workspace.id, contactId: contact.id, kind: "created", body: "Added from booking page" });
+      await fireTrigger(tx, workspace.id, { type: "contact_created", contactId: contact.id });
     } else {
       // Fill in what we didn't have; never overwrite what's there.
       const fill: Partial<Contact> = {};
@@ -363,6 +365,7 @@ export async function bookAppointment(db: Db, slug: string, input: BookingInput,
       kind: "appointment",
       body: `Booked online for ${formatWhen(start, workspace.timezone)}`,
     });
+    await fireTrigger(tx, workspace.id, { type: "appointment_booked", contactId: contact.id, appointmentId: appointment.id, startsAt: start.toISOString() });
     return { appointment, contact };
   });
 
@@ -395,6 +398,7 @@ export async function createAppointment(
       body: `"${appointment.title}" booked for ${formatWhen(input.start, workspace.timezone)}`,
       createdBy: userId,
     });
+    await fireTrigger(tx, workspaceId, { type: "appointment_booked", contactId: contact.id, appointmentId: appointment.id, startsAt: input.start.toISOString() });
     return { appointment, contact };
   });
   return copyToCalendar(db, workspace, appointment, contact, providers);
@@ -416,6 +420,7 @@ export async function cancelAppointment(db: Db, workspaceId: string, appointment
       body: `Canceled "${appt.title}" on ${formatWhen(appt.startsAt, workspace.timezone)}`,
       createdBy: userId,
     });
+    await fireTrigger(tx, workspaceId, { type: "appointment_canceled", contactId: appt.contactId, appointmentId: appt.id });
     const [cal] = appt.calendarId ? await tx.select().from(calendars).where(eq(calendars.id, appt.calendarId)) : [];
     return { appt, cal: cal ?? null };
   });

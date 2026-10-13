@@ -4,6 +4,7 @@ import { activities, contacts, messages, workspaces, type Contact, type Workspac
 import { withWorkspace } from "@/db/tenant";
 import { normalizePhone } from "@/lib/phone";
 import type { EmailProvider, SmsProvider } from "./providers";
+import { fireTrigger } from "@/server/workflows/triggers";
 
 export class MessagingError extends Error {}
 
@@ -191,6 +192,7 @@ async function findOrCreateByPhone(tx: Tx, workspaceId: string, phone: string, s
   if (existing) return existing;
   const [created] = await tx.insert(contacts).values({ workspaceId, phone, source }).returning();
   await tx.insert(activities).values({ workspaceId, contactId: created.id, kind: "created", body: `Added from ${source.toLowerCase()}` });
+  await fireTrigger(tx, workspaceId, { type: "contact_created", contactId: created.id });
   return created;
 }
 
@@ -251,6 +253,7 @@ export async function receiveSms(
         body: `Opted back in to texts by replying ${keyword.toUpperCase()}`,
       });
     }
+    await fireTrigger(tx, workspace.id, { type: "sms_received", contactId: contact.id, body: input.body });
     return { workspaceId: workspace.id, contactId: contact.id, optedOut, optedIn };
   });
 }
@@ -275,6 +278,7 @@ export async function receiveEmail(
         .values({ workspaceId: workspace.id, email, firstName: first ?? "", lastName: rest.join(" "), source: "Inbound email" })
         .returning();
       await tx.insert(activities).values({ workspaceId: workspace.id, contactId: contact.id, kind: "created", body: "Added from inbound email" });
+      await fireTrigger(tx, workspace.id, { type: "contact_created", contactId: contact.id });
     }
     const [message] = await tx
       .insert(messages)
@@ -291,6 +295,7 @@ export async function receiveEmail(
         providerId: input.providerId ?? null,
       })
       .returning();
+    await fireTrigger(tx, workspace.id, { type: "email_received", contactId: contact.id });
     return { workspaceId: workspace.id, contactId: contact.id, messageId: message.id };
   });
 }
@@ -315,6 +320,7 @@ export async function handleCallEnded(
   const contact = await withWorkspace(db, workspace.id, async (tx) => {
     const contact = await findOrCreateByPhone(tx, workspace.id, from, "Missed call");
     await tx.insert(activities).values({ workspaceId: workspace.id, contactId: contact.id, kind: "missed_call", body: "Missed call" });
+    await fireTrigger(tx, workspace.id, { type: "missed_call", contactId: contact.id });
     return contact;
   });
 

@@ -3,8 +3,8 @@
 A lean CRM for running an agency and its small-business clients: separate
 accounts per client, contacts with SMS consent tracking, CSV import,
 drag-and-drop pipelines, a shared text and email inbox with missed-call
-text-back, online booking with calendar connections, and a personal to-do
-list.
+text-back, online booking with calendar connections, workflow automations,
+and a personal to-do list.
 
 ## Run it on your computer
 
@@ -40,6 +40,32 @@ up, the caller gets the missed-call text.
 Texting rules are built in: contacts who reply STOP are never texted again
 (unless they reply START), and a contact without recorded consent can only be
 texted within 24 hours of them texting or calling you.
+
+## Automations
+
+Each account has an **Automations** tab for workflows: a trigger (a new
+contact, a tag added, a text or email received, a missed call, an appointment
+booked or canceled, a deal moved or won, data sent in from another app, or
+adding someone by hand) followed by a list of steps. Steps can send a text or
+email, wait a while or until shortly before an appointment, add or remove a
+tag, add a note, create or move a deal, create a to-do, notify you, send the
+contact's details to another app, or branch with if/else.
+
+- Messages can use merge fields like `{{first_name}}` or `{{first_name|there}}`
+  (with a fallback), plus `{{data.anything}}` for fields sent in from another app.
+- Texts follow the same consent rules as the inbox. A contact who can't be
+  texted is skipped and the workflow carries on.
+- By default a contact leaves a workflow when they reply, and only goes
+  through it once. Both are settings on each workflow.
+- Turning a workflow off stops new contacts from entering; anyone already in it
+  finishes. "Stop everyone in progress" ends them all.
+- The History tab shows each contact's path through the workflow, step by step.
+- The "Data sent in" trigger gives the workflow a private address. POST JSON or
+  form data with an `email` or `phone` (and optionally `name`) from a website
+  form, Zapier or Make to add the contact and start the workflow.
+
+Steps run in the background inside the app, checked every few seconds. Set
+`WORKFLOW_WORKER=off` to stop one copy of the app from running them.
 
 ## Calendars and booking
 
