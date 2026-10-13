@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Every CRM page is per-user and per-account, so we render on each request
-  // instead of using Cache Components' static shells.
-  output: "standalone",
+  // The Docker image sets NEXT_OUTPUT=standalone for a small self-contained build.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   turbopack: {
     rules: {
       "*.css": {

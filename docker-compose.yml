@@ -1,0 +1,45 @@
+# Runs ShabCRM and its database on your computer:  docker compose up --build
+# Then open http://localhost:3000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shab
+      POSTGRES_PASSWORD: shab
+      POSTGRES_DB: shabcrm
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shab -d shabcrm"]
+      interval: 2s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      target: deps
+    command: ["sh", "-c", "pnpm db:migrate"]
+    volumes:
+      - ./drizzle:/app/drizzle:ro
+      - ./src/db:/app/src/db:ro
+    environment:
+      DATABASE_URL: postgres://shab:shab@db:5432/shabcrm
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://shab:shab@db:5432/shabcrm
+      BETTER_AUTH_URL: http://localhost:3000
+      # Fine for running on your own computer. Use a real random secret when hosting.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-only-secret-change-before-hosting-7d1f}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
