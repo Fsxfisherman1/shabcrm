@@ -65,6 +65,7 @@ function WorkspaceNav({ unread }: { unread: Record<string, number> }) {
       <NavLink workspaceHref="/calendar">Calendar</NavLink>
       <NavLink workspaceHref="/contacts">Contacts</NavLink>
       <NavLink workspaceHref="/pipeline">Pipeline</NavLink>
+      <NavLink workspaceHref="/forms">Forms</NavLink>
       <NavLink workspaceHref="/automations">Automations</NavLink>
       <NavLink workspaceHref="/settings">Settings</NavLink>
     </div>
@@ -104,6 +105,9 @@ function MobileBar({
         </NavLink>
         <NavLink workspaceHref="/pipeline" compact>
           Pipeline
+        </NavLink>
+        <NavLink workspaceHref="/forms" compact>
+          Forms
         </NavLink>
         <NavLink workspaceHref="/automations" compact>
           Automations

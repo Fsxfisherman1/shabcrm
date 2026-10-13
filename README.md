@@ -3,8 +3,8 @@
 A lean CRM for running an agency and its small-business clients: separate
 accounts per client, contacts with SMS consent tracking, CSV import,
 drag-and-drop pipelines, a shared text and email inbox with missed-call
-text-back, online booking with calendar connections, workflow automations,
-and a personal to-do list.
+text-back, online booking with calendar connections, website lead forms,
+workflow automations, and a personal to-do list.
 
 ## Run it on your computer
 
@@ -40,6 +40,25 @@ up, the caller gets the missed-call text.
 Texting rules are built in: contacts who reply STOP are never texted again
 (unless they reply START), and a contact without recorded consent can only be
 texted within 24 hours of them texting or calling you.
+
+## Forms
+
+Each account has a **Forms** tab for lead forms. A form has contact fields
+(name, email, phone, company) that fill in the contact, plus your own
+questions (short answer, paragraph or dropdown). Every response:
+
+- adds the person to Contacts, or updates the existing contact with the same
+  email or phone without overwriting what's already there,
+- applies the form's tags,
+- records text consent when they tick the consent checkbox (never for someone
+  who opted out),
+- shows up on the form's Responses tab and the contact's activity, and
+- can start a workflow with the "Form filled in" trigger. Answers to your own
+  questions can go in messages as `{{data.question_label}}`.
+
+Share a form by its link (`/f/<address>`) or paste the embed code from the
+Share tab into any website builder's HTML block. The embedded form resizes
+itself to fit.
 
 ## Automations
 

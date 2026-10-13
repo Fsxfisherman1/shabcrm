@@ -95,6 +95,7 @@ export const triggerSchema: z.ZodType<WorkflowTrigger> = z.discriminatedUnion("t
   z.object({ type: z.literal("appointment_canceled") }),
   z.object({ type: z.literal("deal_stage_changed"), stageId: z.uuid("Pick a stage.") }),
   z.object({ type: z.literal("deal_status_changed"), status: z.enum(["won", "lost"]) }),
+  z.object({ type: z.literal("form_submitted"), formId: z.uuid("Pick a form.") }),
   z.object({ type: z.literal("webhook") }),
 ]);
 
