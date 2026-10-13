@@ -60,6 +60,26 @@ Share a form by its link (`/f/<address>`) or paste the embed code from the
 Share tab into any website builder's HTML block. The embedded form resizes
 itself to fit.
 
+### Keeping a client's existing website forms
+
+The Forms tab also has a **Connect the forms already on their website** box:
+
+- **Website snippet.** Paste the one-line `<script>` once into the site's header
+  or footer code (Squarespace Code Injection, Webflow custom code, a WordPress
+  header/footer plugin). Every form on the site then sends a copy of its answers
+  to ShabCRM as it's submitted, and keeps working as before. Each form shows up
+  in the list as "Form on <page>" the first time it's used; rename it, tag its
+  leads, or switch off **Collect responses** for forms you don't want (like a
+  newsletter box). Sign-in and payment forms, password fields, and submissions
+  with no email or phone are skipped. Add `data-shabcrm-ignore` to a `<form>`
+  to skip it.
+- **Webhook address.** For Wix (whose forms a snippet can't read), Zapier or
+  Make: post the form's data to the address. Change `?form=` at the end to name
+  the form.
+
+Text consent isn't recorded from website forms, because ShabCRM can't see what
+the site's own checkbox said.
+
 ## Automations
 
 Each account has an **Automations** tab for workflows: a trigger (a new

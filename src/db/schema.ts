@@ -89,6 +89,8 @@ export const workspaces = pgTable("workspaces", {
     .default("Sorry we missed your call! How can we help? You can reply right here by text."),
   emailFromName: text("email_from_name"),
   emailFromAddress: text("email_from_address"),
+  // Public key in the website snippet that sends a site's own forms to this account.
+  captureKey: text("capture_key").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -534,6 +536,10 @@ export const forms = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    // "shabcrm": built here. "website": a site's own form, picked up by the snippet or a webhook.
+    source: text("source", { enum: ["shabcrm", "website"] }).notNull().default("shabcrm"),
+    // For website forms: what identifies the form on the site (its page and id or name).
+    externalKey: text("external_key"),
     slug: text("slug").notNull().unique(),
     name: text("name").notNull(),
     enabled: boolean("enabled").notNull().default(true),
@@ -550,7 +556,7 @@ export const forms = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("forms_workspace_idx").on(t.workspaceId)],
+  (t) => [index("forms_workspace_idx").on(t.workspaceId), uniqueIndex("forms_external_key_idx").on(t.workspaceId, t.externalKey)],
 );
 
 /** What someone sent through a form. Tenant data. */
