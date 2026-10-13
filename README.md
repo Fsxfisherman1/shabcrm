@@ -54,5 +54,6 @@ Every client's rows carry a `workspace_id`, and Postgres row-level security
 enforces it. Tenant queries run through `withWorkspace()` (`src/db/tenant.ts`),
 which switches to the restricted `shab_app` role and sets the workspace for
 that transaction. A query that forgets a `where workspace_id = …` still can't
-read or write another client's data. Outside `withWorkspace()`, tenant tables
-return nothing.
+read or write another client's data. Queries outside `withWorkspace()` are
+not protected when the database user is a superuser (as on most hosts), so
+tenant data must always go through it.

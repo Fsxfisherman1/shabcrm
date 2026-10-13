@@ -62,7 +62,11 @@ describe("workspace isolation", () => {
       return tx.select().from(contacts);
     });
     expect(rows).toHaveLength(0);
-    // ...and as the table owner, since row security is forced on owners too.
-    expect(await db.select().from(contacts)).toHaveLength(0);
+    // ...and as a non-superuser table owner, since row security is forced on
+    // owners too. (Superusers, common on hosted Postgres, always bypass it.)
+    const [{ rolsuper }] = await db.execute<{ rolsuper: boolean }>(
+      sql`select rolsuper from pg_roles where rolname = current_user`,
+    );
+    if (!rolsuper) expect(await db.select().from(contacts)).toHaveLength(0);
   });
 });
