@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ShabCRM
 
-## Getting Started
+A lean CRM for running an agency and its small-business clients: separate
+accounts per client, contacts with SMS consent tracking, CSV import,
+drag-and-drop pipelines, and a personal to-do list.
 
-First, run the development server:
+## Run it on your computer
+
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/Fsxfisherman1/shabcrm.git
+cd shabcrm
+docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 and click **Create the owner account**. Only the
+first person can sign up; that account owns the agency.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Your data lives in a Docker volume, so it survives restarts. Stop with
+`Ctrl+C`, start again with `docker compose up`. To wipe everything and start
+fresh: `docker compose down -v`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Develop
 
-## Learn More
+Requires Node 22, pnpm and Postgres 16.
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm install
+cp .env.example .env        # then fill in BETTER_AUTH_SECRET
+pnpm db:migrate
+pnpm dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Run the app with hot reload on http://localhost:3000 |
+| `pnpm test` | Data-layer tests against `TEST_DATABASE_URL` (default `shabcrm_test`) |
+| `pnpm test:e2e` | Browser test of the main flows against a production build (run `pnpm build` first) |
+| `pnpm db:generate` | Create a migration after changing `src/db/schema.ts` |
+| `pnpm db:migrate` | Apply migrations |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## How it's put together
 
-## Deploy on Vercel
+- **Next.js 16** (App Router, server actions) in `src/app`
+- **Postgres + Drizzle** — schema in `src/db/schema.ts`, migrations in `drizzle/`
+- **Better Auth** for email and password sign-in (`src/lib/auth.ts`)
+- **Data layer** in `src/server/*` — plain functions that take a db and a
+  workspace id, tested in `tests/`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Client data isolation
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Every client's rows carry a `workspace_id`, and Postgres row-level security
+enforces it. Tenant queries run through `withWorkspace()` (`src/db/tenant.ts`),
+which switches to the restricted `shab_app` role and sets the workspace for
+that transaction. A query that forgets a `where workspace_id = …` still can't
+read or write another client's data. Outside `withWorkspace()`, tenant tables
+return nothing.

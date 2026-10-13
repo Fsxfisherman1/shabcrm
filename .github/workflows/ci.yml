@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shab
+          POSTGRES_PASSWORD: shab
+          POSTGRES_DB: shabcrm_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shab" --health-interval 2s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://shab:shab@localhost:5432/shabcrm_test
+      E2E_DATABASE_URL: postgres://shab:shab@localhost:5432/shabcrm_e2e
+      DATABASE_URL: postgres://shab:shab@localhost:5432/shabcrm_e2e
+      BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only
+      BETTER_AUTH_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: PGPASSWORD=shab psql -h localhost -U shab -d shabcrm_test -c "create database shabcrm_e2e"
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
