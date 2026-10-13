@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table todos, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table todos, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -117,6 +117,47 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.goto(workspaceUrl);
   await expect(page.getByText("$1,200")).toBeVisible();
   await shot(page, "01-overview");
+
+  // Messaging, in test mode: set up the account's number and from address.
+  await page.goto(`${workspaceUrl}/settings`);
+  await page.getByLabel("Texting number").fill("(415) 555-0100");
+  await page.getByLabel("Send emails from (name)").fill("Bright Smile Dental");
+  await page.getByLabel("Send emails from (address)").fill("hello@brightsmile.test");
+  await page.getByRole("button", { name: "Save texting and email" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+
+  // A new customer texts in; it lands in the inbox as unread.
+  await page.getByRole("link", { name: "Inbox" }).first().click();
+  await expect(page.getByText("Test mode.")).toBeVisible();
+  await page.getByRole("button", { name: "Pretend a customer messaged you" }).click();
+  await page.getByLabel("From").fill("(415) 555-0177");
+  await page.getByLabel("What they say").fill("Do you have openings Saturday?");
+  await page.getByRole("button", { name: "Simulate" }).click();
+  const convo = page.getByRole("link", { name: /Do you have openings Saturday/ });
+  await expect(convo).toBeVisible();
+  await expect(page.getByLabel("1 unread").first()).toBeVisible();
+
+  // Reply by text (allowed because they texted first). Opening it marks it read.
+  await convo.click();
+  await page.getByLabel("Message").fill("Yes! Does 10am work?");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Yes! Does 10am work?").first()).toBeVisible();
+  await expect(page.getByText(/Text · .* · Sent/)).toBeVisible();
+  await expect(page.getByLabel("1 unread")).toHaveCount(0);
+  await shot(page, "07-inbox");
+
+  // Maria opted out of texts, so her conversation offers email only.
+  await page.goto(`${workspaceUrl}/contacts`);
+  await page.getByRole("link", { name: "Maria Lopez" }).click();
+  await page.getByRole("link", { name: "Message" }).click();
+  await expect(page.getByRole("tab", { name: "Email", selected: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Text" }).click();
+  await expect(page.getByText("This contact opted out of texts.")).toBeVisible();
+  await page.getByRole("tab", { name: "Email" }).click();
+  await page.getByLabel("Subject").fill("Your whitening quote");
+  await page.getByLabel("Message").fill("Hi Maria, the package is $1,200.");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText(/Email · .* · Sent/)).toBeVisible();
 
   // To-do list.
   await page.getByRole("link", { name: "To-do" }).first().click();

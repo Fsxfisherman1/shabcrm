@@ -80,6 +80,15 @@ export const workspaces = pgTable("workspaces", {
   name: text("name").notNull(),
   kind: workspaceKind("kind").notNull().default("client"),
   timezone: text("timezone").notNull().default("America/New_York"),
+  // Messaging settings
+  smsNumber: text("sms_number").unique(), // this account's texting number, E.164
+  forwardCallsTo: text("forward_calls_to"), // the business's real phone, E.164
+  missedCallTextEnabled: boolean("missed_call_text_enabled").notNull().default(false),
+  missedCallText: text("missed_call_text")
+    .notNull()
+    .default("Sorry we missed your call! How can we help? You can reply right here by text."),
+  emailFromName: text("email_from_name"),
+  emailFromAddress: text("email_from_address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -146,6 +155,7 @@ export const activityKind = pgEnum("activity_kind", [
   "deal_created",
   "stage_changed",
   "consent_changed",
+  "missed_call",
 ]);
 
 export const activities = pgTable(
@@ -218,6 +228,40 @@ export const deals = pgTable(
   (t) => [index("deals_stage_idx").on(t.stageId, t.position)],
 );
 
+export const messageChannel = pgEnum("message_channel", ["sms", "email"]);
+export const messageDirection = pgEnum("message_direction", ["inbound", "outbound"]);
+export const messageStatus = pgEnum("message_status", ["queued", "sent", "delivered", "failed", "received"]);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    channel: messageChannel("channel").notNull(),
+    direction: messageDirection("direction").notNull(),
+    status: messageStatus("status").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    fromAddress: text("from_address").notNull(),
+    toAddress: text("to_address").notNull(),
+    providerId: text("provider_id"),
+    error: text("error"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("messages_contact_idx").on(t.contactId, t.createdAt),
+    index("messages_workspace_idx").on(t.workspaceId, t.createdAt),
+    uniqueIndex("messages_provider_uq").on(t.providerId).where(sql`${t.providerId} is not null`),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Personal to-do list (per user, optionally tied to an account or contact)
 // ---------------------------------------------------------------------------
@@ -246,3 +290,4 @@ export type PipelineStage = typeof pipelineStages.$inferSelect;
 export type Deal = typeof deals.$inferSelect;
 export type Todo = typeof todos.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
+export type Message = typeof messages.$inferSelect;

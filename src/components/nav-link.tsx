@@ -14,12 +14,15 @@ export function NavLink({
   workspaceHref,
   exact,
   compact,
+  badges,
   children,
 }: {
   href?: string;
   workspaceHref?: string;
   exact?: boolean;
   compact?: boolean;
+  /** Unread counts by account id, shown next to the link. */
+  badges?: Record<string, number>;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -34,17 +37,23 @@ export function NavLink({
   }
   if (!target) return null;
 
+  const badge = workspaceId ? (badges?.[workspaceId] ?? 0) : 0;
   const active = exact ? pathname === target : pathname === target || pathname.startsWith(`${target}/`);
   return (
     <Link
       href={target}
       className={clsx(
-        "block rounded-lg text-sm font-medium transition-colors",
+        "flex items-center justify-between gap-2 rounded-lg text-sm font-medium transition-colors",
         compact ? "shrink-0 px-3 py-1.5" : "px-2 py-1.5",
         active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
       )}
     >
       {children}
+      {badge > 0 && (
+        <span className="rounded-full bg-brand-600 px-1.5 text-xs font-medium text-white" aria-label={`${badge} unread`}>
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }

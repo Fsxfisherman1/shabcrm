@@ -8,7 +8,7 @@ export const db = createDb(process.env.DATABASE_URL!);
 
 export async function resetDb() {
   await db.execute(
-    sql`truncate table todos, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`,
+    sql`truncate table todos, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`,
   );
 }
 
