@@ -106,6 +106,7 @@ function problem(step: WorkflowStep): string | null {
 function triggerProblem(t: WorkflowTrigger): string | null {
   if (t.type === "tag_added" && !t.tag.trim()) return "Choose a tag.";
   if (t.type === "deal_stage_changed" && !t.stageId) return "Pick a stage.";
+  if (t.type === "form_submitted" && !t.formId) return "Pick a form.";
   return null;
 }
 
@@ -118,6 +119,7 @@ export function Builder({
   workflow,
   hookUrl,
   pipelines,
+  forms,
   tags,
   contacts,
   runCount,
@@ -128,6 +130,7 @@ export function Builder({
   workflow: State & { id: string };
   hookUrl: string;
   pipelines: Pipeline[];
+  forms: { id: string; name: string }[];
   tags: string[];
   contacts: { id: string; name: string }[];
   runCount: number;
@@ -146,6 +149,7 @@ export function Builder({
 
   const stages = pipelines.flatMap((p) => p.stages.map((s) => ({ ...s, label: pipelines.length > 1 ? `${p.name}: ${s.name}` : s.name, pipelineId: p.id })));
   const stageName = (stageId: string) => stages.find((s) => s.id === stageId)?.label;
+  const formName = (formId: string) => forms.find((f) => f.id === formId)?.name;
   const firstStage = pipelines[0]?.stages[0];
 
   // Warn before leaving with unsaved changes.
@@ -267,7 +271,7 @@ export function Builder({
                 tone="trigger"
                 label="Trigger"
                 title={TRIGGER_LABEL[state.trigger.type]}
-                summary={summarizeTrigger(state.trigger, stageName)}
+                summary={summarizeTrigger(state.trigger, stageName, formName)}
                 selected={selected === "trigger"}
                 warning={triggerProblem(state.trigger)}
                 onClick={() => select("trigger")}
@@ -289,7 +293,7 @@ export function Builder({
           <aside ref={panel} className="scroll-mt-4 lg:sticky lg:top-4 lg:self-start">
             <Card className="p-5">
               {selected === "trigger" || !selectedStep ? (
-                <TriggerEditor trigger={state.trigger} onChange={(trigger) => update({ trigger })} stages={stages} tags={tags} hookUrl={hookUrl} />
+                <TriggerEditor trigger={state.trigger} onChange={(trigger) => update({ trigger })} stages={stages} forms={forms} tags={tags} hookUrl={hookUrl} />
               ) : (
                 <StepEditor
                   key={selectedStep.id}
@@ -542,12 +546,14 @@ function TriggerEditor({
   trigger,
   onChange,
   stages,
+  forms,
   tags,
   hookUrl,
 }: {
   trigger: WorkflowTrigger;
   onChange: (t: WorkflowTrigger) => void;
   stages: { id: string; label: string }[];
+  forms: { id: string; name: string }[];
   tags: string[];
   hookUrl: string;
 }) {
@@ -559,7 +565,7 @@ function TriggerEditor({
       </div>
       <div>
         <Label htmlFor="trigger-type">Event</Label>
-        <Select id="trigger-type" value={trigger.type} onChange={(e) => onChange(blankTrigger(e.target.value as WorkflowTrigger["type"], { stageId: stages[0]?.id }))}>
+        <Select id="trigger-type" value={trigger.type} onChange={(e) => onChange(blankTrigger(e.target.value as WorkflowTrigger["type"], { stageId: stages[0]?.id, formId: forms[0]?.id }))}>
           {(Object.keys(TRIGGER_LABEL) as WorkflowTrigger["type"][]).map((t) => (
             <option key={t} value={t}>
               {TRIGGER_LABEL[t]}
@@ -575,6 +581,25 @@ function TriggerEditor({
           <Input id="trigger-keyword" value={trigger.keyword ?? ""} placeholder="e.g. QUOTE" onChange={(e) => onChange({ ...trigger, keyword: e.target.value })} />
         </div>
       )}
+      {trigger.type === "form_submitted" &&
+        (forms.length ? (
+          <div>
+            <Label htmlFor="trigger-form">Form</Label>
+            <Select id="trigger-form" value={trigger.formId} onChange={(e) => onChange({ ...trigger, formId: e.target.value })}>
+              {!trigger.formId && <option value="">Pick a form</option>}
+              {forms.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-slate-500">
+              Answers to your own questions can go in messages, like <code>{"{{data.how_can_we_help}}"}</code>.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-amber-700">Make a form on the Forms tab first.</p>
+        ))}
       {trigger.type === "deal_stage_changed" && <StagePicker id="trigger-stage" value={trigger.stageId} stages={stages} onChange={(stageId) => onChange({ ...trigger, stageId })} />}
       {trigger.type === "deal_status_changed" && (
         <div>

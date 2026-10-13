@@ -9,6 +9,7 @@ import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
 import { listContacts, listTags } from "@/server/contacts";
 import { messagingConfig } from "@/server/messaging/config";
+import { listForms } from "@/server/forms";
 import { listPipelinesWithStages } from "@/server/pipelines";
 import { getWorkflow, listRuns } from "@/server/workflows";
 import { Builder } from "./builder";
@@ -29,8 +30,9 @@ export default async function WorkflowPage({ params }: { params: Promise<{ works
   if (!/^[0-9a-f-]{36}$/i.test(workflowId)) notFound();
   const workflow = await getWorkflow(db, workspaceId, workflowId);
   if (!workflow) notFound();
-  const [pipelines, tags, { rows: contacts }, runs] = await Promise.all([
+  const [pipelines, forms, tags, { rows: contacts }, runs] = await Promise.all([
     listPipelinesWithStages(db, workspaceId),
+    listForms(db, workspaceId),
     listTags(db, workspaceId),
     listContacts(db, workspaceId, { limit: 500 }),
     listRuns(db, workspaceId, workflowId),
@@ -85,6 +87,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ works
       }}
       hookUrl={`${appUrl}/api/workflows/hooks/${workspaceId}/${workflow.hookToken}`}
       pipelines={pipelines}
+      forms={forms.map((f) => ({ id: f.id, name: f.name }))}
       tags={tags.map((t) => t.tag)}
       contacts={contacts.map((c) => ({ id: c.id, name: contactName({ ...c, phone: formatPhone(c.phone) }) }))}
       runCount={runs.length}

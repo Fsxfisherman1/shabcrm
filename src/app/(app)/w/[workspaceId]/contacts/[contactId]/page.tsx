@@ -22,6 +22,7 @@ const KIND_LABEL: Record<string, string> = {
   consent_changed: "Consent",
   missed_call: "Call",
   appointment: "Appointment",
+  form_submitted: "Form",
 };
 
 export default async function ContactPage({ params }: { params: Promise<{ workspaceId: string; contactId: string }> }) {

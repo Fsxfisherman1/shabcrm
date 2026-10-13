@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table form_submissions, forms, workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -205,6 +205,40 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.getByRole("button", { name: "Book", exact: true }).click();
   await expect(page.getByText("Booked for Tue, Jan 15 at 10:30 AM.")).toBeVisible();
   await expect(page.getByText('"Whitening" booked for Tue, Jan 15 at 10:30 AM')).toBeVisible();
+
+  // Forms: make a lead form, then fill it in the way a website visitor would.
+  await page.goto(`${workspaceUrl}/forms`);
+  await expect(page.getByText("No forms yet")).toBeVisible();
+  await page.getByRole("button", { name: "New form" }).click();
+  await expect(page.getByLabel("Form name")).toHaveValue("Contact form");
+  const formEditorUrl = page.url();
+  await page.getByLabel("Form name").fill("Quote request");
+  await page.getByRole("button", { name: "+ Dropdown" }).click();
+  await expect(page.getByLabel("Dropdown", { exact: true })).toHaveValue("Which service?");
+  await page.getByLabel("Choices, one per line").fill("Cleaning\nWhitening");
+  await page.getByLabel("Tag new leads (comma separated)").fill("website lead");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await shot(page, "14-form-builder");
+  await page.getByRole("tab", { name: "Share" }).click();
+  const formLink = await page.getByLabel("Form link").inputValue();
+  await expect(page.getByLabel("Embed code")).toHaveValue(/<iframe/);
+  await page.goto(new URL(formLink).pathname);
+  await page.getByLabel(/^Name/).fill("Sam Rivera");
+  await page.getByLabel(/^Email/).fill("sam@example.com");
+  await page.getByLabel(/^Phone/).fill("(415) 555-0199");
+  await page.getByLabel(/^Which service/).selectOption("Whitening");
+  await page.getByLabel(/I agree to receive text messages/).check();
+  await shot(page, "15-form-public");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Thanks! We'll be in touch soon.")).toBeVisible();
+  await page.goto(formEditorUrl);
+  await page.getByRole("tab", { name: /Responses \(1\)/ }).click();
+  await expect(page.getByText("Whitening")).toBeVisible();
+  await page.getByRole("link", { name: "Sam Rivera" }).click();
+  await expect(page.getByText("website lead").first()).toBeVisible();
+  await expect(page.getByText(/Filled in "Quote request"/)).toBeVisible();
+  await expect(page.getByLabel("SMS consent")).toHaveValue("granted");
 
   // Automations: start from the missed-call template, add a step, turn it on.
   await page.getByRole("link", { name: "Automations" }).first().click();

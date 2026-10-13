@@ -13,6 +13,7 @@ export const TRIGGER_LABEL: Record<WorkflowTrigger["type"], string> = {
   appointment_canceled: "Appointment canceled",
   deal_stage_changed: "Deal moved to a stage",
   deal_status_changed: "Deal won or lost",
+  form_submitted: "Form filled in",
   webhook: "Data sent in",
 };
 
@@ -27,6 +28,7 @@ export const TRIGGER_HELP: Record<WorkflowTrigger["type"], string> = {
   appointment_canceled: "An appointment is canceled.",
   deal_stage_changed: "A deal lands in a pipeline stage.",
   deal_status_changed: "A deal is marked won or lost.",
+  form_submitted: "Someone fills in one of your website forms.",
   webhook: "Your website or another app (Zapier, Make…) sends a lead in.",
 };
 
@@ -137,8 +139,14 @@ export function stepTitle(step: WorkflowStep) {
   return STEP_LABEL[step.type];
 }
 
-export function summarizeTrigger(t: WorkflowTrigger, stageName: (id: string) => string | undefined = () => undefined) {
+export function summarizeTrigger(
+  t: WorkflowTrigger,
+  stageName: (id: string) => string | undefined = () => undefined,
+  formName: (id: string) => string | undefined = () => undefined,
+) {
   switch (t.type) {
+    case "form_submitted":
+      return formName(t.formId) ? `"${formName(t.formId)}" filled in` : "Pick a form";
     case "tag_added":
       return t.tag ? `Tag "${t.tag}" added` : "Choose a tag";
     case "sms_received":
@@ -188,8 +196,10 @@ export function blankStep(type: StepType, defaults: { pipelineId?: string; stage
   }
 }
 
-export function blankTrigger(type: WorkflowTrigger["type"], defaults: { stageId?: string } = {}): WorkflowTrigger {
+export function blankTrigger(type: WorkflowTrigger["type"], defaults: { stageId?: string; formId?: string } = {}): WorkflowTrigger {
   switch (type) {
+    case "form_submitted":
+      return { type, formId: defaults.formId ?? "" };
     case "tag_added":
       return { type, tag: "" };
     case "sms_received":

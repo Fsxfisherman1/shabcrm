@@ -13,6 +13,7 @@ export type TriggerEvent =
   | { type: "appointment_canceled"; contactId: string; appointmentId: string }
   | { type: "deal_stage_changed"; contactId: string; dealId: string; stageId: string }
   | { type: "deal_status_changed"; contactId: string; dealId: string; status: "won" | "lost" | "open" }
+  | { type: "form_submitted"; contactId: string; formId: string; data: Record<string, string> }
   | { type: "webhook"; contactId: string; workflowId: string; data: Record<string, unknown> }
   | { type: "manual"; contactId: string; workflowId: string };
 
@@ -31,6 +32,8 @@ function matches(workflow: Workflow, event: TriggerEvent): boolean {
       return t.type === "deal_stage_changed" && t.stageId === event.stageId;
     case "deal_status_changed":
       return t.type === "deal_status_changed" && t.status === event.status;
+    case "form_submitted":
+      return t.type === "form_submitted" && t.formId === event.formId;
     case "webhook":
     case "manual":
       return workflow.id === event.workflowId;

@@ -157,6 +157,7 @@ export const activityKind = pgEnum("activity_kind", [
   "consent_changed",
   "missed_call",
   "appointment",
+  "form_submitted",
 ]);
 
 export const activities = pgTable(
@@ -385,6 +386,7 @@ export type WorkflowTrigger =
   | { type: "appointment_canceled" }
   | { type: "deal_stage_changed"; stageId: string }
   | { type: "deal_status_changed"; status: "won" | "lost" }
+  | { type: "form_submitted"; formId: string }
   | { type: "webhook" };
 
 export type WorkflowCondition =
@@ -505,6 +507,72 @@ export const workflowQueue = pgTable(
   (t) => [index("workflow_queue_wake_idx").on(t.wakeAt)],
 );
 
+// ---------------------------------------------------------------------------
+// Website forms
+// ---------------------------------------------------------------------------
+
+/** Fields that fill in the contact record. */
+export const CONTACT_FIELD_KINDS = ["first_name", "last_name", "full_name", "email", "phone", "company"] as const;
+
+export type FormField = {
+  id: string;
+  kind: (typeof CONTACT_FIELD_KINDS)[number] | "text" | "textarea" | "select";
+  label: string;
+  required: boolean;
+  /** Choices for a "select" field. */
+  options?: string[];
+};
+
+/**
+ * A lead form. Like booking pages, forms are public (looked up by slug from the
+ * form page) and have no row-level security: keep anything private out of them.
+ */
+export const forms = pgTable(
+  "forms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    fields: jsonb("fields").$type<FormField[]>().notNull(),
+    submitLabel: text("submit_label").notNull().default("Send"),
+    thankYou: text("thank_you").notNull().default("Thanks! We'll be in touch soon."),
+    // Where to send people after they submit, instead of showing the thank-you message.
+    redirectUrl: text("redirect_url"),
+    // Shown with a checkbox when the form asks for a phone number.
+    smsConsentText: text("sms_consent_text"),
+    tags: text("tags").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("forms_workspace_idx").on(t.workspaceId)],
+);
+
+/** What someone sent through a form. Tenant data. */
+export const formSubmissions = pgTable(
+  "form_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    /** Answers by field label. */
+    answers: jsonb("answers").$type<Record<string, string>>().notNull(),
+    page: text("page"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("form_submissions_form_idx").on(t.formId, t.createdAt)],
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Pipeline = typeof pipelines.$inferSelect;
@@ -518,3 +586,5 @@ export type Calendar = typeof calendars.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type Form = typeof forms.$inferSelect;
+export type FormSubmission = typeof formSubmissions.$inferSelect;

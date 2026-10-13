@@ -8,7 +8,8 @@ import { requireWorkspace } from "@/lib/session";
 import { getBookingPage, listAppointments, listCalendars } from "@/server/calendars";
 import { oauthApp } from "@/server/calendars/config";
 import { messagingConfig } from "@/server/messaging/config";
-import { AddCalendar, BookingPageForm, CalendarRow, CancelButton, CopyField } from "./forms";
+import { CopyField } from "@/components/copy-field";
+import { AddCalendar, BookingPageForm, CalendarRow, CancelButton } from "./forms";
 
 export const metadata: Metadata = { title: "Calendar" };
 
