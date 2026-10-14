@@ -7,6 +7,7 @@ import { Badge, buttonClass, Card } from "@/components/ui";
 import { contactName, formatDate, formatMoney } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { markContactSeen } from "@/server/badges";
 import { formatWhen, getBookingPage, listAppointments } from "@/server/calendars";
 import { getContact } from "@/server/contacts";
 import { AppointmentForm, ConsentForm, DeleteContactButton, EditContactForm, NoteForm } from "./forms";
@@ -27,10 +28,11 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function ContactPage({ params }: { params: Promise<{ workspaceId: string; contactId: string }> }) {
   const { workspaceId, contactId } = await params;
-  const { workspace } = await requireWorkspace(workspaceId);
+  const { workspace, user } = await requireWorkspace(workspaceId);
   if (!/^[0-9a-f-]{36}$/i.test(contactId)) notFound();
   const detail = await getContact(db, workspaceId, contactId);
   if (!detail) notFound();
+  await markContactSeen(db, user.id, workspaceId, contactId);
   const { contact, timeline, deals } = detail;
   const [upcoming, bookingPage] = await Promise.all([
     listAppointments(db, workspaceId, { contactId: contact.id, from: new Date() }),

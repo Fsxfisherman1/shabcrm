@@ -169,8 +169,12 @@ Calendar passwords and tokens are encrypted with a key derived from
 Red bubbles on the sidebar show what needs a look: **Inbox** counts unread
 conversations, **To-do** counts what's due today or overdue, and **Contacts**,
 **Calendar** (upcoming bookings), **Pipeline** (deals), **Forms** (responses) and
-**Automations** (failed runs) count what's new since you last opened that tab.
-Each person has their own counts. Other accounts show their total in the
+**Automations** (failed runs) count what's new. Each person chooses in
+**Settings → Red counts in the sidebar** how those clear: item by item as each
+one is opened (the default: a contact's page clears that contact and their
+deals, bookings and form responses; a form's page clears its responses; a
+workflow's page clears its failed runs), or all at once when the tab is opened.
+Things you added yourself don't count. Each person has their own counts. Other accounts show their total in the
 account switcher. The counts refresh as you move around and every 20 seconds.
 
 ## Develop

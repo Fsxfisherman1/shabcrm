@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { parseMoneyToCents } from "@/lib/format";
 import { requireWorkspace } from "@/lib/session";
+import { markItemsSeen } from "@/server/badges";
 import {
   addStage,
   createDeal,
@@ -50,12 +51,14 @@ export async function createDealAction(
 export async function moveDealAction(workspaceId: string, dealId: string, stageId: string, index: number) {
   const { user } = await requireWorkspace(workspaceId);
   await moveDeal(db, workspaceId, dealId, stageId, index, user.id);
+  await markItemsSeen(db, user.id, workspaceId, "deal", [dealId]);
   refresh();
 }
 
 export async function setDealStatusAction(workspaceId: string, dealId: string, status: "open" | "won" | "lost") {
-  await requireWorkspace(workspaceId);
+  const { user } = await requireWorkspace(workspaceId);
   await updateDeal(db, workspaceId, dealId, { status });
+  await markItemsSeen(db, user.id, workspaceId, "deal", [dealId]);
   refresh();
 }
 

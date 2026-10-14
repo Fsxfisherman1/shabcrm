@@ -7,6 +7,7 @@ import { Badge, EmptyState } from "@/components/ui";
 import { contactName } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { markItemsSeen } from "@/server/badges";
 import { listContacts, listTags } from "@/server/contacts";
 import { messagingConfig } from "@/server/messaging/config";
 import { listForms } from "@/server/forms";
@@ -26,7 +27,7 @@ const STATUS: Record<string, { label: string; tone: "slate" | "green" | "red" | 
 
 export default async function WorkflowPage({ params }: { params: Promise<{ workspaceId: string; workflowId: string }> }) {
   const { workspaceId, workflowId } = await params;
-  const { workspace } = await requireWorkspace(workspaceId);
+  const { workspace, user } = await requireWorkspace(workspaceId);
   if (!/^[0-9a-f-]{36}$/i.test(workflowId)) notFound();
   const workflow = await getWorkflow(db, workspaceId, workflowId);
   if (!workflow) notFound();
@@ -37,6 +38,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ works
     listContacts(db, workspaceId, { limit: 500 }),
     listRuns(db, workspaceId, workflowId),
   ]);
+  await markItemsSeen(db, user.id, workspaceId, "run", runs.filter(({ run }) => run.status === "failed").map(({ run }) => run.id));
   const { appUrl } = messagingConfig();
   const tz = workspace.timezone;
   const when = (d: Date) => DateTime.fromJSDate(d, { zone: tz }).toFormat("LLL d, h:mm a");

@@ -92,6 +92,13 @@
       "when": 1791932534353,
       "tag": "0012_tab_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791936376320,
+      "tag": "0013_item_seen",
+      "breakpoints": true
     }
   ]
 }

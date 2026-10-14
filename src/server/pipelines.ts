@@ -143,6 +143,7 @@ export async function createDeal(
         valueCents: Math.max(0, Math.round(input.valueCents)),
         contactId: input.contactId || null,
         position: 0,
+        createdBy: userId,
       })
       .returning();
     if (deal.contactId) {

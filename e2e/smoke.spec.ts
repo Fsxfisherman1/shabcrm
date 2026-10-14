@@ -128,6 +128,9 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.getByLabel("iMessage number").fill("(415) 555-0122");
   await page.getByRole("button", { name: "Save messaging" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
+  await expect(page.getByRole("switch", { name: /Clear each red count when I open that item/ })).toBeChecked();
+  await page.getByRole("heading", { name: "Red counts in the sidebar" }).scrollIntoViewIfNeeded();
+  await shot(page, "20-settings-counts");
 
   // A new customer texts in; it lands in the inbox as unread.
   await page.getByRole("link", { name: "Inbox" }).first().click();
@@ -266,16 +269,18 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await shot(page, "15-form-public");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Thanks! We'll be in touch soon.")).toBeVisible();
+  // The sidebar's red counts: the response counts until it's opened.
+  await page.goto(workspaceUrl);
+  await expect(page.getByLabel("1 new response").first()).toBeVisible();
+  await shot(page, "19-sidebar-counts");
   await page.goto(formEditorUrl);
   await page.getByRole("tab", { name: /Responses \(1\)/ }).click();
   await expect(page.getByText("Whitening")).toBeVisible();
   await page.getByRole("link", { name: "Sam Rivera" }).click();
+  await expect(page.getByLabel(/new response/)).toHaveCount(0);
   await expect(page.getByText("website lead").first()).toBeVisible();
   await expect(page.getByText(/Filled in "Quote request"/)).toBeVisible();
   await expect(page.getByLabel("SMS consent")).toHaveValue("granted");
-  // The sidebar's red counts: the new response shows on Forms until Forms is opened.
-  await expect(page.getByLabel("1 new response").first()).toBeVisible();
-  await shot(page, "19-sidebar-counts");
 
   // A client's own website form, on another site, with the snippet pasted in.
   await page.goto(`${workspaceUrl}/forms`);

@@ -4,7 +4,8 @@ export type SeenTab = (typeof SEEN_TABS)[number];
 export type BadgeTab = SeenTab | "inbox";
 
 export type WorkspaceBadges = Record<BadgeTab, number>;
-export type Badges = { accounts: Record<string, WorkspaceBadges>; todos: number };
+/** clearPerItem: counts clear as each item is opened (true) or when the tab is opened (false). */
+export type Badges = { accounts: Record<string, WorkspaceBadges>; todos: number; clearPerItem: boolean };
 
 export const BADGE_LABEL: Record<BadgeTab, (n: number) => string> = {
   inbox: (n) => `${n} unread`,

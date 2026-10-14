@@ -41,12 +41,13 @@ export function NavLink({
   if (!target) return null;
 
   const active = exact ? pathname === target : pathname === target || pathname.startsWith(`${target}/`);
-  // "New since you looked" counts hide while you're looking; unread and due counts stay.
+  // When opening the tab clears its count, hide it while you're on the tab.
+  // Unread, due and item-by-item counts stay, so you can watch them go down.
   const count = !tab
     ? 0
     : tab === "todos"
       ? badges.todos
-      : active && tab !== "inbox"
+      : active && tab !== "inbox" && !badges.clearPerItem
         ? 0
         : (workspaceId && badges.accounts[workspaceId]?.[tab]) || 0;
   const label = tab === "todos" ? `${count} due` : tab ? BADGE_LABEL[tab](count) : "";

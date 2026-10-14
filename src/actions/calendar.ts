@@ -6,6 +6,7 @@ import { DateTime } from "luxon";
 import { db } from "@/db";
 import { workspaces, type WeeklyHours } from "@/db/schema";
 import { requireWorkspace } from "@/lib/session";
+import { markItemsSeen } from "@/server/badges";
 import {
   addCalendar,
   bookAppointment,
@@ -159,6 +160,7 @@ export async function createAppointmentAction(workspaceId: string, contactId: st
 export async function cancelAppointmentAction(workspaceId: string, appointmentId: string) {
   const { user } = await requireWorkspace(workspaceId);
   await cancelAppointment(db, workspaceId, appointmentId, user.id, realProviders);
+  await markItemsSeen(db, user.id, workspaceId, "appointment", [appointmentId]);
   refresh();
 }
 

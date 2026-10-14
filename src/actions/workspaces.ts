@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { getCurrentUser, requireWorkspace } from "@/lib/session";
+import { setClearPerItem } from "@/server/badges";
 import { createWorkspace, renameWorkspace } from "@/server/workspaces";
 import type { ActionState } from "./types";
 
@@ -27,4 +28,11 @@ export async function renameAccount(workspaceId: string, _: ActionState, form: F
   await renameWorkspace(db, workspaceId, parsed.data);
   revalidatePath("/", "layout"); // the sidebar's account list
   return { ok: true, message: "Saved." };
+}
+
+/** A personal setting: whether red counts clear item by item or when the tab is opened. */
+export async function setClearPerItemAction(workspaceId: string, on: boolean) {
+  const { user } = await requireWorkspace(workspaceId);
+  await setClearPerItem(db, user.id, on);
+  refresh();
 }

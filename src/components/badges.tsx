@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { Badges } from "@/lib/badges";
 
-const BadgeContext = createContext<Badges>({ accounts: {}, todos: 0 });
+const BadgeContext = createContext<Badges>({ accounts: {}, todos: 0, clearPerItem: true });
 
 export const useBadges = () => useContext(BadgeContext);
 

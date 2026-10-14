@@ -6,15 +6,17 @@ import { withWorkspace } from "@/db/tenant";
 import { Card, PageHeader } from "@/components/ui";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { getBadgePrefs } from "@/server/badges";
 import { messagingConfig, replyToAddress } from "@/server/messaging/config";
 import { listPipelines } from "@/server/pipelines";
-import { MessagingForm, NewPipelineForm, PipelineEditor, RenameAccountForm } from "./forms";
+import { ClearCountsSetting, MessagingForm, NewPipelineForm, PipelineEditor, RenameAccountForm } from "./forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
-  const { workspace } = await requireWorkspace(workspaceId);
+  const { workspace, user } = await requireWorkspace(workspaceId);
+  const prefs = await getBadgePrefs(db, user.id);
   const config = messagingConfig();
   const pipelines = await listPipelines(db, workspaceId);
   const stages = pipelines.length
@@ -33,6 +35,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
       <Card className="p-5">
         <h2 className="mb-3 font-semibold">Account name</h2>
         <RenameAccountForm workspaceId={workspaceId} name={workspace.name} />
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-1 font-semibold">Red counts in the sidebar</h2>
+        <p className="mb-4 text-sm text-slate-500">Just for you, in every account.</p>
+        <ClearCountsSetting workspaceId={workspaceId} clearPerItem={prefs.clearPerItem} />
       </Card>
 
       <Card className="p-5">
