@@ -144,6 +144,8 @@ export function MessagingForm({
     missedCallText: string;
     emailFromName: string;
     emailFromAddress: string;
+    whatsappNumber: string;
+    imessageNumber: string;
   };
 }) {
   const [state, onSubmit, pending] = useActionForm(updateMessagingSettingsAction.bind(null, workspaceId));
@@ -155,6 +157,12 @@ export function MessagingForm({
         </Field>
         <Field label="Forward calls to" name="forwardCallsTo">
           <Input id="forwardCallsTo" name="forwardCallsTo" defaultValue={settings.forwardCallsTo} placeholder="The business's real phone" />
+        </Field>
+        <Field label="WhatsApp number" name="whatsappNumber">
+          <Input id="whatsappNumber" name="whatsappNumber" defaultValue={settings.whatsappNumber} placeholder="The approved WhatsApp sender in Twilio" />
+        </Field>
+        <Field label="iMessage number" name="imessageNumber">
+          <Input id="imessageNumber" name="imessageNumber" defaultValue={settings.imessageNumber} placeholder="The Sendblue line for this account" />
         </Field>
         <Field label="Send emails from (name)" name="emailFromName">
           <Input id="emailFromName" name="emailFromName" defaultValue={settings.emailFromName} placeholder="e.g. Acme Plumbing" />
@@ -173,7 +181,7 @@ export function MessagingForm({
       <FormError message={state.error} />
       {state.ok && <p className="text-sm text-emerald-600">{state.message}</p>}
       <Button type="submit" variant="secondary" disabled={pending}>
-        Save texting and email
+        Save messaging
       </Button>
     </form>
   );

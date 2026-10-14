@@ -89,6 +89,8 @@ export const workspaces = pgTable("workspaces", {
     .default("Sorry we missed your call! How can we help? You can reply right here by text."),
   emailFromName: text("email_from_name"),
   emailFromAddress: text("email_from_address"),
+  whatsappNumber: text("whatsapp_number").unique(), // Twilio WhatsApp sender, E.164
+  imessageNumber: text("imessage_number").unique(), // Sendblue line, E.164
   // Public key in the website snippet that sends a site's own forms to this account.
   captureKey: text("capture_key").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -232,7 +234,7 @@ export const deals = pgTable(
   (t) => [index("deals_stage_idx").on(t.stageId, t.position)],
 );
 
-export const messageChannel = pgEnum("message_channel", ["sms", "email"]);
+export const messageChannel = pgEnum("message_channel", ["sms", "email", "whatsapp", "imessage"]);
 export const messageDirection = pgEnum("message_direction", ["inbound", "outbound"]);
 export const messageStatus = pgEnum("message_status", ["queued", "sent", "delivered", "failed", "received"]);
 

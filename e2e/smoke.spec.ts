@@ -124,7 +124,9 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.getByLabel("Texting number").fill("(415) 555-0100");
   await page.getByLabel("Send emails from (name)").fill("Bright Smile Dental");
   await page.getByLabel("Send emails from (address)").fill("hello@brightsmile.test");
-  await page.getByRole("button", { name: "Save texting and email" }).click();
+  await page.getByLabel("WhatsApp number").fill("(415) 555-0111");
+  await page.getByLabel("iMessage number").fill("(415) 555-0122");
+  await page.getByRole("button", { name: "Save messaging" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
 
   // A new customer texts in; it lands in the inbox as unread.
@@ -145,7 +147,36 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await expect(page.getByText("Yes! Does 10am work?").first()).toBeVisible();
   await expect(page.getByText(/Text · .* · Sent/)).toBeVisible();
   await expect(page.getByLabel("1 unread")).toHaveCount(0);
+
+  // The same customer follows up by iMessage; it joins the same conversation
+  // and the reply goes back by iMessage.
+  await page.getByLabel("What happens").selectOption("imessage");
+  await page.getByLabel("From").fill("(415) 555-0177");
+  await page.getByLabel("What they say").fill("Running 5 min late!");
+  await page.getByRole("button", { name: "Simulate" }).click();
+  await expect(page.getByText("Running 5 min late!").first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "iMessage", selected: true })).toBeVisible();
+  await page.getByLabel("Message").fill("No problem, see you soon.");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText(/iMessage · .* · Sent/)).toBeVisible();
   await shot(page, "07-inbox");
+
+  // A new customer writes on WhatsApp; reply there within WhatsApp's 24 hours.
+  await page.getByRole("button", { name: "Pretend a customer messaged you" }).click();
+  await page.getByLabel("What happens").selectOption("whatsapp");
+  await page.getByLabel("From").fill("(415) 555-0133");
+  await page.getByLabel("What they say").fill("Hola, do you take new patients?");
+  await page.getByRole("button", { name: "Simulate" }).click();
+  await page.getByRole("link", { name: /do you take new patients/ }).click();
+  await expect(page.getByRole("tab", { name: "WhatsApp", selected: true })).toBeVisible();
+  await page.getByLabel("Message").fill("Yes we do! Want to book a visit?");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText(/WhatsApp · .* · Sent/)).toBeVisible();
+  await page.getByRole("navigation", { name: "Channel" }).getByRole("link", { name: "WhatsApp" }).click();
+  await expect(page.getByRole("link", { name: /Want to book a visit/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /see you soon/ })).toHaveCount(0);
+  await shot(page, "18-inbox-whatsapp");
 
   // Maria opted out of texts, so her conversation offers email only.
   await page.goto(`${workspaceUrl}/contacts`);
@@ -154,6 +185,8 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await expect(page.getByRole("tab", { name: "Email", selected: true })).toBeVisible();
   await page.getByRole("tab", { name: "Text" }).click();
   await expect(page.getByText("This contact opted out of texts.")).toBeVisible();
+  await page.getByRole("tab", { name: "WhatsApp" }).click();
+  await expect(page.getByText(/WhatsApp only lets businesses reply within 24 hours/)).toBeVisible();
   await page.getByRole("tab", { name: "Email" }).click();
   await page.getByLabel("Subject").fill("Your whitening quote");
   await page.getByLabel("Message").fill("Hi Maria, the package is $1,200.");
