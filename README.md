@@ -94,6 +94,17 @@ The Forms tab also has a **Connect the forms already on their website** box:
 Text consent isn't recorded from website forms, because ShabCRM can't see what
 the site's own checkbox said.
 
+## Websites and funnels
+
+**Sites** builds pages from ready-made sections: a big heading, text, a list of benefits, reviews, questions and answers, a picture, a YouTube or Vimeo video, a call to action, a form and a "book a time" button.
+
+- **New website** starts with Home, About and Contact pages and a menu across the top.
+- **New funnel** starts with two steps, a free-quote page and a thank-you page with a booking button. A funnel has no menu; its buttons and its form take people to the next step.
+
+Each new site gets its own form (it's in Forms too), so its leads land in Contacts with that form's tags and start any "Form filled in" workflow. Pick the main color and lettering under Settings. A site stays a draft, visible only to people signed in to the account, until you turn on **Published**. Pages are at `/s/<address>`; pointing your own domain at a site comes with hosting.
+
+The **Visitors** tab shows, for the last 30 days, how many people saw each page, how many sent its form, and for funnels how many went on to the next step. A visitor is counted once per page with a random id kept in their browser; nothing personal is stored.
+
 ## Automations
 
 Each account has an **Automations** tab for workflows: a trigger (a new

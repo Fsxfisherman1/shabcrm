@@ -79,6 +79,7 @@ function WorkspaceNav() {
       <NavLink workspaceHref="/forms" badge="forms">
         Forms
       </NavLink>
+      <NavLink workspaceHref="/sites">Sites</NavLink>
       <NavLink workspaceHref="/automations" badge="automations">
         Automations
       </NavLink>
@@ -117,6 +118,9 @@ function MobileBar({ workspaces }: { workspaces: { id: string; name: string; kin
         </NavLink>
         <NavLink workspaceHref="/forms" compact badge="forms">
           Forms
+        </NavLink>
+        <NavLink workspaceHref="/sites" compact>
+          Sites
         </NavLink>
         <NavLink workspaceHref="/automations" compact badge="automations">
           Automations
