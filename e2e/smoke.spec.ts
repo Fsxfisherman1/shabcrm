@@ -14,7 +14,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table ai_queue, ai_settings, form_submissions, forms, workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table site_events, site_pages, sites, ai_queue, ai_settings, form_submissions, forms, workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -413,6 +413,52 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await page.goto(`${workspaceUrl}/automations`);
   await expect(page.getByRole("link", { name: "Missed call text back" })).toBeVisible();
   await shot(page, "13-automations");
+
+  // A funnel: edit the first step, publish it, and a visitor goes through it.
+  await page.getByRole("link", { name: "Sites" }).first().click();
+  await page.getByRole("button", { name: "New funnel" }).click();
+  await expect(page.getByRole("heading", { name: "Sections" })).toBeVisible();
+  await page.getByRole("button", { name: /^Big heading/ }).click();
+  await page.getByLabel("Heading", { exact: true }).fill("Free whitening consult");
+  await expect(page.getByLabel("Page preview").getByRole("heading", { name: "Free whitening consult" })).toBeVisible();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await page.getByRole("switch", { name: "Published" }).click();
+  await expect(page.getByText("Published", { exact: true })).toBeVisible();
+  await shot(page, "23-site-editor");
+  const editorUrl = page.url();
+  const funnelUrl = (await page.getByRole("link", { name: "Open page" }).getAttribute("href"))!;
+
+  await page.goto(funnelUrl);
+  await expect(page.getByRole("heading", { name: "Free whitening consult" })).toBeVisible();
+  await shot(page, "24-funnel-public");
+  await page.getByRole("link", { name: "Get my quote" }).click();
+  await page.getByLabel("Name").fill("Funnel Fiona");
+  await page.getByLabel("Email").fill("fiona@example.com");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page).toHaveURL(/\/thank-you$/);
+  await expect(page.getByRole("heading", { name: "Thanks, we've got it" })).toBeVisible();
+
+  await page.goto(editorUrl);
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole("tab", { name: "Visitors" }).click();
+    const row = page.getByRole("row").filter({ hasText: "Get your free quote" });
+    await expect(row.getByRole("cell")).toHaveText(["1Get your free quote", "1", "1(100%)", "100%"], { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await shot(page, "25-funnel-numbers");
+  await page.goto(`${workspaceUrl}/contacts`);
+  await expect(page.getByRole("link", { name: "Funnel Fiona" })).toBeVisible();
+
+  // A website starts with Home, About and Contact pages.
+  await page.goto(`${workspaceUrl}/sites`);
+  await expect(page.getByRole("link", { name: "Free quote funnel" })).toBeVisible();
+  await page.getByRole("button", { name: "New website" }).click();
+  await expect(page.getByRole("button", { name: "2 About" })).toBeVisible();
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Color #0d9488" }).click();
+  await page.getByRole("tab", { name: "Pages" }).click();
+  await shot(page, "26-website-editor");
 
   // To-do list.
   await page.getByRole("link", { name: "To-do" }).first().click();

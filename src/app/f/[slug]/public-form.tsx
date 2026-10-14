@@ -24,6 +24,8 @@ export function PublicForm({
   submitLabel,
   thankYou,
   smsConsentText,
+  showHeading = true,
+  onSent,
 }: {
   slug: string;
   embed: boolean;
@@ -33,6 +35,9 @@ export function PublicForm({
   submitLabel: string;
   thankYou: string;
   smsConsentText: string | null;
+  showHeading?: boolean;
+  /** Called after a send instead of the usual redirect, with the form's own page to go to, if any. */
+  onSent?: (redirectUrl: string | null) => void;
 }) {
   const [state, onSubmit, pending] = useActionForm(submitFormAction.bind(null, slug));
   const pageInput = useRef<HTMLInputElement>(null);
@@ -50,13 +55,14 @@ export function PublicForm({
   }, [embed, slug]);
 
   useEffect(() => {
+    if (state.ok && onSent) return onSent(state.message ?? null);
     if (!state.ok || !state.message) return;
     try {
       (window.top ?? window).location.href = state.message;
     } catch {
       window.location.href = state.message;
     }
-  }, [state]);
+  }, [state, onSent]);
 
   return (
     <div ref={box}>
@@ -66,10 +72,12 @@ export function PublicForm({
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-            {description && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{description}</p>}
-          </div>
+          {showHeading && (
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+              {description && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{description}</p>}
+            </div>
+          )}
           {fields.map((f) => {
             const id = `field_${f.id}`;
             const label = (

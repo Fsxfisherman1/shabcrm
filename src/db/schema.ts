@@ -13,6 +13,7 @@ import {
   uuid,
   date,
 } from "drizzle-orm/pg-core";
+import type { SiteBlock, SiteKind, SiteTheme } from "@/lib/sites";
 
 // ---------------------------------------------------------------------------
 // Auth tables (shape required by Better Auth)
@@ -678,6 +679,75 @@ export const aiQueue = pgTable("ai_queue", {
   attempts: integer("attempts").notNull().default(0),
 });
 
+// ---------------------------------------------------------------------------
+// Websites and funnels
+// ---------------------------------------------------------------------------
+
+/**
+ * A website or funnel. Like forms, sites and their pages are public (looked up
+ * by address from the public page), so row-level security is enabled but not
+ * forced: keep anything private out of them.
+ */
+export const sites = pgTable(
+  "sites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<SiteKind>().notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    enabled: boolean("enabled").notNull().default(false),
+    theme: jsonb("theme").$type<SiteTheme>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sites_workspace_idx").on(t.workspaceId)],
+);
+
+/** A page of a site, in order. For funnels, the order is the steps. */
+export const sitePages = pgTable(
+  "site_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    position: integer("position").notNull(),
+    blocks: jsonb("blocks").$type<SiteBlock[]>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("site_pages_slug_idx").on(t.siteId, t.slug)],
+);
+
+/** Visits and form sends on site pages, for the funnel numbers. Tenant data. */
+export const siteEvents = pgTable(
+  "site_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => sitePages.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["view", "submit"] }).notNull(),
+    // A random id the visitor's browser keeps, so a visitor counts once.
+    visitorId: text("visitor_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("site_events_site_idx").on(t.siteId, t.createdAt)],
+);
+
 export type Workspace = typeof workspaces.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Pipeline = typeof pipelines.$inferSelect;
@@ -693,3 +763,5 @@ export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type Form = typeof forms.$inferSelect;
 export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type Site = typeof sites.$inferSelect;
+export type SitePage = typeof sitePages.$inferSelect;
