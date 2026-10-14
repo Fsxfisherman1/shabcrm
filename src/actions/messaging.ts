@@ -15,6 +15,7 @@ import {
   updateMessagingSettings,
 } from "@/server/messaging";
 import { allProviders, messagingConfig, replyToAddress } from "@/server/messaging/config";
+import { LeadAlertError, updateLeadAlerts } from "@/server/lead-alerts";
 import type { ActionState } from "./types";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -132,4 +133,21 @@ export async function simulateIncomingAction(workspaceId: string, _: ActionState
   }
   refresh();
   return { ok: true };
+}
+
+export async function saveLeadAlertsAction(workspaceId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  await requireWorkspace(workspaceId);
+  const on = form.get("enabled") === "on";
+  try {
+    await updateLeadAlerts(db, workspaceId, {
+      minutes: on ? Number(form.get("minutes")) : null,
+      email: String(form.get("email") ?? "").trim().toLowerCase() || null,
+      phone: String(form.get("phone") ?? "").trim() || null,
+    });
+  } catch (err) {
+    if (err instanceof LeadAlertError) return { error: err.message };
+    throw err;
+  }
+  refresh();
+  return { ok: true, message: on ? "Saved. Alerts are on." : "Saved. Alerts are off." };
 }

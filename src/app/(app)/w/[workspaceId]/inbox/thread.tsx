@@ -2,7 +2,8 @@
 
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { draftReplyAction } from "@/actions/ai";
 import { markReadAction, sendMessageAction, simulateIncomingAction } from "@/actions/messaging";
 import { Button, FormError, Input, Select, Textarea } from "@/components/ui";
 import { useActionForm } from "@/components/use-action-form";
@@ -42,12 +43,14 @@ export function Composer({
   channels,
   defaultChannel,
   replySubject,
+  canDraft,
 }: {
   workspaceId: string;
   contactId: string;
   channels: { id: Channel; permission: Permission }[];
   defaultChannel: Channel;
   replySubject: string;
+  canDraft: boolean;
 }) {
   // Reply the way they last wrote, unless that's not allowed right now.
   const allowed = (id: Channel) => channels.find((c) => c.id === id)?.permission.allowed;
@@ -59,6 +62,15 @@ export function Composer({
     onSuccess: () => setBody(""),
   });
   const permission = channels.find((c) => c.id === channel)?.permission ?? { allowed: false, reason: "Pick how to send it." };
+  const [drafting, startDraft] = useTransition();
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const draft = () =>
+    startDraft(async () => {
+      setDraftError(null);
+      const res = await draftReplyAction(workspaceId, contactId, channel);
+      if (res.draft) setBody(res.draft);
+      else setDraftError(res.error ?? "Couldn't write a draft.");
+    });
 
   return (
     <form onSubmit={onSubmit} className="space-y-2 border-t border-slate-200 p-4">
@@ -97,14 +109,21 @@ export function Composer({
             placeholder={PLACEHOLDER[channel]}
             aria-label="Message"
           />
-          <FormError message={state.error} />
-          <div className="flex items-center justify-between">
+          <FormError message={state.error ?? draftError} />
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-slate-400">
               {channel === "sms" && body.length > 0 && `${body.length} characters · ${Math.ceil(body.length / 160)} text${body.length > 160 ? "s" : ""}`}
             </span>
-            <Button type="submit" disabled={pending || !body.trim()}>
-              {pending ? "Sending…" : "Send"}
-            </Button>
+            <div className="flex gap-2">
+              {canDraft && (
+                <Button type="button" variant="ghost" disabled={drafting || pending} onClick={draft}>
+                  {drafting ? "Writing…" : body.trim() ? "Redo with AI" : "Draft with AI"}
+                </Button>
+              )}
+              <Button type="submit" disabled={pending || !body.trim()}>
+                {pending ? "Sending…" : "Send"}
+              </Button>
+            </div>
           </div>
         </>
       )}

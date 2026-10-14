@@ -85,6 +85,8 @@ export default async function WorkflowPage({ params }: { params: Promise<{ works
         trigger: workflow.trigger,
         steps: workflow.steps,
         stopOnReply: workflow.stopOnReply,
+        stopOnBooking: workflow.stopOnBooking,
+        stopOnWon: workflow.stopOnWon,
         allowReentry: workflow.allowReentry,
       }}
       hookUrl={`${appUrl}/api/workflows/hooks/${workspaceId}/${workflow.hookToken}`}

@@ -98,8 +98,8 @@ the site's own checkbox said.
 
 Each account has an **Automations** tab for workflows: a trigger (a new
 contact, a tag added, a text or email received, a missed call, an appointment
-booked or canceled, a deal moved or won, data sent in from another app, or
-adding someone by hand) followed by a list of steps. Steps can send a text or
+booked or canceled, a deal moved or won, a message the AI tagged, data sent in
+from another app, or adding someone by hand) followed by a list of steps. Steps can send a text or
 email, wait a while or until shortly before an appointment, add or remove a
 tag, add a note, create or move a deal, create a to-do, notify you, send the
 contact's details to another app, or branch with if/else.
@@ -109,7 +109,8 @@ contact's details to another app, or branch with if/else.
 - Texts follow the same consent rules as the inbox. A contact who can't be
   texted is skipped and the workflow carries on.
 - By default a contact leaves a workflow when they reply, and only goes
-  through it once. Both are settings on each workflow.
+  through it once. Both are settings on each workflow, along with leaving when
+  they book an appointment or a deal of theirs is won.
 - Turning a workflow off stops new contacts from entering; anyone already in it
   finishes. "Stop everyone in progress" ends them all.
 - The History tab shows each contact's path through the workflow, step by step.
@@ -195,6 +196,31 @@ pnpm dev
 | `pnpm test:e2e` | Browser test of the main flows against a production build (run `pnpm build` first) |
 | `pnpm db:generate` | Create a migration after changing `src/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
+
+## Speed-to-lead alerts
+
+In **Settings → Speed-to-lead alerts**, pick a number of minutes and an email
+and/or phone. When someone texts, emails or fills in a form and nobody at the
+business has replied in that time, an alert goes out with a link to the
+conversation. Only a person replying counts (automations don't), STOP replies
+are ignored, and there's one alert per wait. Texts go from the account's
+texting number and emails from its from address. Conversations past the limit
+show "Waiting 23m" in the Inbox.
+
+## AI
+
+In **Settings → AI**, each account connects the language model of its choice:
+Claude (Anthropic), ChatGPT (OpenAI), Gemini (Google), or any OpenAI-compatible
+service by its API address (OpenRouter, Groq, Mistral, DeepSeek, Together, or a
+local Ollama or LM Studio). The key is stored encrypted and never shown again.
+
+- **Draft with AI** in the Inbox writes a reply from the conversation and the
+  "About the business" notes. You edit and send it; the AI never sends anything.
+- **Tags**: each incoming text, iMessage, WhatsApp or email is tagged as
+  "Wants to book", "Asking about price", "Reschedule or cancel", "Unhappy" or
+  "Question" in the background. Tags show in the Inbox, and the "AI tagged a
+  message" trigger starts workflows from them (e.g. pricing question → create a
+  call to-do). Turn tagging off to save AI requests.
 
 ## How it's put together
 

@@ -6,7 +6,9 @@ import { Badge, Card, PageHeader } from "@/components/ui";
 import { contactName } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
-import { getConversation, listConversations } from "@/server/messaging";
+import { INTENT_LABEL, isIntent } from "@/lib/ai";
+import { getAiSettings } from "@/server/ai";
+import { getConversation, isStopWord, listConversations } from "@/server/messaging";
 import { messagingConfig } from "@/server/messaging/config";
 import type { Message } from "@/db/schema";
 import { CHANNEL_BUBBLE, CHANNEL_DOT, CHANNEL_LABEL, CHANNELS, type Channel } from "@/lib/channels";
@@ -31,6 +33,10 @@ export default async function InboxPage({
   const conversations = await listConversations(db, workspaceId, { unreadOnly, channel });
   const convo = c && UUID.test(c) ? await getConversation(db, workspaceId, c) : null;
   const config = messagingConfig();
+  const ai = await getAiSettings(db, workspaceId);
+  // With speed-to-lead alerts on, conversations past the limit say how long they've waited.
+  const alertAfterMs = workspace.leadAlertMinutes ? workspace.leadAlertMinutes * 60_000 : null;
+  const loadedAt = new Date();
   // Text and email are always offered; WhatsApp and iMessage once the account has a number for them.
   const channels = CHANNELS.filter(
     (x) => (x !== "whatsapp" || workspace.whatsappNumber) && (x !== "imessage" || workspace.imessageNumber),
@@ -118,6 +124,8 @@ export default async function InboxPage({
             <ul className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
               {conversations.map((row) => {
                 const name = contactName({ firstName: row.first_name, lastName: row.last_name, email: row.email, phone: formatPhone(row.phone) });
+                const waitedMs = loadedAt.getTime() - row.created_at.getTime();
+                const waiting = alertAfterMs !== null && row.direction === "inbound" && !isStopWord(row.body) && waitedMs >= alertAfterMs;
                 return (
                   <li key={row.contact_id}>
                     <Link
@@ -139,6 +147,12 @@ export default async function InboxPage({
                           <span className="ml-auto shrink-0 rounded-full bg-brand-600 px-1.5 text-xs font-medium text-white">{row.unread}</span>
                         )}
                       </div>
+                      {(waiting || (row.direction === "inbound" && isIntent(row.intent))) && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {waiting && <Badge tone="red">Waiting {waitedFor(waitedMs)}</Badge>}
+                          {row.direction === "inbound" && isIntent(row.intent) && <Badge tone="brand">{INTENT_LABEL[row.intent]}</Badge>}
+                        </div>
+                      )}
                     </Link>
                   </li>
                 );
@@ -187,6 +201,7 @@ export default async function InboxPage({
               }))}
               defaultChannel={convo.messages.at(-1)?.channel ?? (convo.contact.phone ? "sms" : "email")}
               replySubject={replySubject(convo.messages)}
+              canDraft={Boolean(ai)}
             />
           </Card>
         ) : (
@@ -213,7 +228,8 @@ function Bubble({ message: m }: { message: Message }) {
         {m.subject && <div className="mb-1 font-semibold">{m.subject}</div>}
         {m.body}
       </div>
-      <div className="mt-1 text-xs text-slate-400">
+      <div className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-slate-400">
+        {!outbound && isIntent(m.intent) && <Badge tone="brand">{INTENT_LABEL[m.intent]}</Badge>}
         {CHANNEL_LABEL[m.channel]} · {shortTime(m.createdAt)}
         {outbound && ` · ${STATUS[m.status]}`}
         {m.status === "failed" && m.error && <span className="text-red-600"> ({m.error})</span>}
@@ -228,6 +244,13 @@ function replySubject(messages: Message[]) {
   const last = messages.findLast((m) => m.channel === "email" && m.subject);
   if (!last?.subject) return "";
   return /^re:/i.test(last.subject) ? last.subject : `Re: ${last.subject}`;
+}
+
+function waitedFor(ms: number) {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)}h`;
+  return `${Math.round(minutes / (24 * 60))}d`;
 }
 
 function listOf(items: string[]) {

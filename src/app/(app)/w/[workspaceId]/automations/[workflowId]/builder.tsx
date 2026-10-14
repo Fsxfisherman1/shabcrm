@@ -7,6 +7,7 @@ import type { WorkflowCondition, WorkflowStep, WorkflowTrigger } from "@/db/sche
 import { deleteWorkflowAction, enrollAction, saveWorkflowAction, stopAllRunsAction } from "@/actions/workflows";
 import { Button, Card, FormError, Input, Label, Select, Textarea } from "@/components/ui";
 import { useActionForm } from "@/components/use-action-form";
+import { INTENT_LABEL, INTENTS } from "@/lib/ai";
 import {
   blankStep,
   blankTrigger,
@@ -31,6 +32,8 @@ type State = {
   trigger: WorkflowTrigger;
   steps: WorkflowStep[];
   stopOnReply: boolean;
+  stopOnBooking: boolean;
+  stopOnWon: boolean;
   allowReentry: boolean;
 };
 type Branch = "then" | "else";
@@ -327,6 +330,18 @@ export function Builder({
               hint="If they text or email back, they leave this workflow so you can take over."
             />
             <Check
+              checked={state.stopOnBooking}
+              onChange={(v) => update({ stopOnBooking: v })}
+              label="Stop when the contact books an appointment"
+              hint="Good for follow-ups that are trying to get a booking. Leave off for appointment reminders."
+            />
+            <Check
+              checked={state.stopOnWon}
+              onChange={(v) => update({ stopOnWon: v })}
+              label="Stop when a deal of theirs is won"
+              hint="Once they've bought, they stop getting sales follow-ups."
+            />
+            <Check
               checked={state.allowReentry}
               onChange={(v) => update({ allowReentry: v })}
               label="Let a contact go through more than once"
@@ -601,6 +616,18 @@ function TriggerEditor({
           <p className="text-sm text-amber-700">Make a form on the Forms tab first.</p>
         ))}
       {trigger.type === "deal_stage_changed" && <StagePicker id="trigger-stage" value={trigger.stageId} stages={stages} onChange={(stageId) => onChange({ ...trigger, stageId })} />}
+      {trigger.type === "intent_detected" && (
+        <div>
+          <Label htmlFor="trigger-intent">The message is tagged</Label>
+          <Select id="trigger-intent" value={trigger.intent} onChange={(e) => onChange({ ...trigger, intent: e.target.value })}>
+            {INTENTS.map((i) => (
+              <option key={i} value={i}>
+                {INTENT_LABEL[i]}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
       {trigger.type === "deal_status_changed" && (
         <div>
           <Label htmlFor="trigger-status">Marked as</Label>

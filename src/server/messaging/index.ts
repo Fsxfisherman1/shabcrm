@@ -6,6 +6,7 @@ import { normalizePhone } from "@/lib/phone";
 import { statusToken } from "./config";
 import { ProviderError, type EmailProvider, type SmsProvider } from "./providers";
 import { fireTrigger } from "@/server/workflows/triggers";
+import { queueTagging } from "@/server/ai";
 
 export class MessagingError extends Error {}
 
@@ -29,6 +30,11 @@ export const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const STOP_WORDS = new Set(["stop", "stopall", "unsubscribe", "cancel", "end", "quit", "revoke", "optout"]);
 const START_WORDS = new Set(["start", "unstop", "yes"]);
+
+/** A STOP-style reply, which needs no answer. */
+export function isStopWord(body: string) {
+  return STOP_WORDS.has(keywordOf(body));
+}
 
 // ---------------------------------------------------------------------------
 // Consent
@@ -298,7 +304,7 @@ export async function receivePhoneMessage(
       if (dupe) return null; // Twilio retried a webhook we already handled.
     }
     const contact = await findOrCreateByPhone(tx, workspace.id, from, INBOUND_SOURCE[input.channel]);
-    await tx.insert(messages).values({
+    const [message] = await tx.insert(messages).values({
       workspaceId: workspace.id,
       contactId: contact.id,
       channel: input.channel,
@@ -308,7 +314,7 @@ export async function receivePhoneMessage(
       fromAddress: from,
       toAddress: channelNumber(workspace, input.channel)!,
       providerId: input.providerId ?? null,
-    });
+    }).returning({ id: messages.id });
 
     // STOP and START by text or iMessage change text consent. On WhatsApp,
     // STOP just closes the conversation (see whatsappPermission).
@@ -354,6 +360,7 @@ export async function receivePhoneMessage(
         body: `Opted back in to texts by replying ${keyword.toUpperCase()}${how === "text" ? "" : " by iMessage"}`,
       });
     }
+    if (!optedOut && !optedIn) await queueTagging(tx, workspace.id, message.id);
     await fireTrigger(tx, workspace.id, { type: "sms_received", contactId: contact.id, body: input.body });
     return { workspaceId: workspace.id, contactId: contact.id, optedOut, optedIn };
   });
@@ -396,6 +403,7 @@ export async function receiveEmail(
         providerId: input.providerId ?? null,
       })
       .returning();
+    await queueTagging(tx, workspace.id, message.id);
     await fireTrigger(tx, workspace.id, { type: "email_received", contactId: contact.id });
     return { workspaceId: workspace.id, contactId: contact.id, messageId: message.id };
   });
@@ -456,12 +464,13 @@ export async function listConversations(db: Db, workspaceId: string, opts: { unr
       direction: "inbound" | "outbound";
       body: string;
       status: string;
+      intent: string | null;
       created_at: string;
       unread: number;
     }>(sql`
       select distinct on (m.contact_id)
         m.contact_id, c.first_name, c.last_name, c.email, c.phone,
-        m.channel, m.direction, m.body, m.status, m.created_at,
+        m.channel, m.direction, m.body, m.status, m.intent, m.created_at,
         (select count(*)::int from messages u
           where u.contact_id = m.contact_id and u.direction = 'inbound' and u.read_at is null) as unread
       from messages m

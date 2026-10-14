@@ -14,7 +14,7 @@ test.beforeAll(async () => {
   const sql = postgres(process.env.E2E_DATABASE_URL ?? "postgres://shab:shab@localhost:5432/shabcrm_e2e", {
     onnotice: () => {},
   });
-  await sql`truncate table form_submissions, forms, workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
+  await sql`truncate table ai_queue, ai_settings, form_submissions, forms, workflow_queue, workflow_run_logs, workflow_runs, workflows, todos, appointments, calendars, booking_pages, messages, activities, deals, pipeline_stages, pipelines, contacts, memberships, workspaces, session, account, verification, "user" cascade`;
   await sql.end();
 });
 
@@ -180,6 +180,53 @@ test("owner signs up, adds a client, imports contacts, works the pipeline", asyn
   await expect(page.getByRole("link", { name: /Want to book a visit/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /see you soon/ })).toHaveCount(0);
   await shot(page, "18-inbox-whatsapp");
+
+  // Connect an AI (a stand-in OpenAI-compatible service here), then let it tag
+  // a new message and draft a reply. Also turn on speed-to-lead alerts.
+  const llm = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const sorting = body.includes("You sort the messages");
+      const content = sorting ? "wants_to_book" : body.includes("connection test") ? "OK" : "Hi! We have Tuesday at 9am or Thursday at 2pm. Which suits you?";
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+    });
+  });
+  await new Promise<void>((resolve) => llm.listen(3198, resolve));
+  try {
+    await page.goto(`${workspaceUrl}/settings`);
+    await page.getByLabel("Alert me when a lead waits too long").check();
+    await page.getByLabel("After (minutes)").fill("15");
+    await page.getByLabel("Email the alert to").fill("alex@example.com");
+    await page.getByRole("button", { name: "Save alerts" }).click();
+    await expect(page.getByText("Saved. Alerts are on.")).toBeVisible();
+    await page.getByLabel("AI service").selectOption("openai_compatible");
+    await page.getByLabel("Model", { exact: true }).fill("stand-in");
+    await page.getByLabel("API address").fill("http://localhost:3198/v1");
+    await page.getByLabel("About the business, for drafting replies").fill("Family dentist. Open Mon-Fri 8-5.");
+    await page.getByRole("button", { name: "Save AI" }).click();
+    await expect(page.getByText("Saved. Use Test to check it works.")).toBeVisible();
+    await page.getByRole("button", { name: "Test", exact: true }).click();
+    await expect(page.getByText("It works.")).toBeVisible();
+    await page.getByRole("heading", { name: "Speed-to-lead alerts" }).scrollIntoViewIfNeeded();
+    await shot(page, "21-settings-ai");
+
+    await page.getByRole("link", { name: "Inbox" }).first().click();
+    await page.getByRole("button", { name: "Pretend a customer messaged you" }).click();
+    await page.getByLabel("From").fill("(415) 555-0144");
+    await page.getByLabel("What they say").fill("Can I book a cleaning next week?");
+    await page.getByRole("button", { name: "Simulate" }).click();
+    const booking = page.getByRole("link", { name: /book a cleaning next week/ });
+    // The background worker tags it within a few seconds; the inbox refreshes itself.
+    await expect(booking.getByText("Wants to book")).toBeVisible({ timeout: 30_000 });
+    await booking.click();
+    await page.getByRole("button", { name: "Draft with AI" }).click();
+    await expect(page.getByLabel("Message")).toHaveValue("Hi! We have Tuesday at 9am or Thursday at 2pm. Which suits you?");
+    await shot(page, "22-inbox-ai-draft");
+  } finally {
+    llm.close();
+  }
 
   // Maria opted out of texts, so her conversation offers email only.
   await page.goto(`${workspaceUrl}/contacts`);

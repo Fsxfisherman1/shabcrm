@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { WorkflowStep, WorkflowTrigger } from "@/db/schema";
+import { INTENTS } from "@/lib/ai";
 
 // ---------------------------------------------------------------------------
 // Walking the step tree. Steps are a list; an "if" step holds two more lists.
@@ -96,6 +97,7 @@ export const triggerSchema: z.ZodType<WorkflowTrigger> = z.discriminatedUnion("t
   z.object({ type: z.literal("deal_stage_changed"), stageId: z.uuid("Pick a stage.") }),
   z.object({ type: z.literal("deal_status_changed"), status: z.enum(["won", "lost"]) }),
   z.object({ type: z.literal("form_submitted"), formId: z.uuid("Pick a form.") }),
+  z.object({ type: z.literal("intent_detected"), intent: z.enum(INTENTS, "Pick what the message is about.") }),
   z.object({ type: z.literal("webhook") }),
 ]);
 

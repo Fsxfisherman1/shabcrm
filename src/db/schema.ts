@@ -93,6 +93,11 @@ export const workspaces = pgTable("workspaces", {
   imessageNumber: text("imessage_number").unique(), // Sendblue line, E.164
   // Public key in the website snippet that sends a site's own forms to this account.
   captureKey: text("capture_key").unique(),
+  // Speed-to-lead: when a lead has waited this many minutes for an answer, alert
+  // this email and/or phone. Off when the minutes are empty.
+  leadAlertMinutes: integer("lead_alert_minutes"),
+  leadAlertEmail: text("lead_alert_email"),
+  leadAlertPhone: text("lead_alert_phone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -306,6 +311,10 @@ export const messages = pgTable(
     error: text("error"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     readAt: timestamp("read_at", { withTimezone: true }),
+    // What an inbound message is about, tagged by the account's AI (see src/lib/ai.ts).
+    intent: text("intent"),
+    // When a speed-to-lead alert went out about this message going unanswered.
+    leadAlertedAt: timestamp("lead_alerted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -438,6 +447,7 @@ export type WorkflowTrigger =
   | { type: "deal_stage_changed"; stageId: string }
   | { type: "deal_status_changed"; status: "won" | "lost" }
   | { type: "form_submitted"; formId: string }
+  | { type: "intent_detected"; intent: string }
   | { type: "webhook" };
 
 export type WorkflowCondition =
@@ -477,6 +487,9 @@ export const workflows = pgTable(
     steps: jsonb("steps").$type<WorkflowStep[]>().notNull().default([]),
     // Stop a contact's run when they text or email back.
     stopOnReply: boolean("stop_on_reply").notNull().default(true),
+    // Stop a contact's run when they book an appointment, or a deal of theirs is won.
+    stopOnBooking: boolean("stop_on_booking").notNull().default(false),
+    stopOnWon: boolean("stop_on_won").notNull().default(false),
     // Let a contact go through again while (or after) they've been through once.
     allowReentry: boolean("allow_reentry").notNull().default(false),
     // Secret for the "data sent in" (webhook) trigger URL.
@@ -623,10 +636,47 @@ export const formSubmissions = pgTable(
     /** Answers by field label. */
     answers: jsonb("answers").$type<Record<string, string>>().notNull(),
     page: text("page"),
+    leadAlertedAt: timestamp("lead_alerted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("form_submissions_form_idx").on(t.formId, t.createdAt)],
 );
+
+// ---------------------------------------------------------------------------
+// AI: each account can connect the language model of its choice
+// ---------------------------------------------------------------------------
+
+export type AiProvider = "anthropic" | "openai" | "gemini" | "openai_compatible";
+
+export const aiSettings = pgTable("ai_settings", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  provider: text("provider").$type<AiProvider>().notNull(),
+  model: text("model").notNull(),
+  // For OpenAI-compatible services (OpenRouter, Groq, a local Ollama…).
+  baseUrl: text("base_url"),
+  // Encrypted with encryptJson. Empty for services that need no key.
+  apiKey: text("api_key"),
+  // What the business is and how it talks, for drafting replies.
+  about: text("about").notNull().default(""),
+  // Tag what each inbound message is about.
+  tagMessages: boolean("tag_messages").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Inbound messages waiting to be tagged. Like workflow_queue, the worker reads it across accounts.
+export const aiQueue = pgTable("ai_queue", {
+  messageId: uuid("message_id")
+    .primaryKey()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+});
 
 export type Workspace = typeof workspaces.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
