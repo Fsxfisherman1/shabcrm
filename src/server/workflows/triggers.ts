@@ -14,6 +14,7 @@ export type TriggerEvent =
   | { type: "deal_stage_changed"; contactId: string; dealId: string; stageId: string }
   | { type: "deal_status_changed"; contactId: string; dealId: string; status: "won" | "lost" | "open" }
   | { type: "form_submitted"; contactId: string; formId: string; data: Record<string, string> }
+  | { type: "intent_detected"; contactId: string; intent: string; messageId: string }
   | { type: "webhook"; contactId: string; workflowId: string; data: Record<string, unknown> }
   | { type: "manual"; contactId: string; workflowId: string };
 
@@ -34,6 +35,8 @@ function matches(workflow: Workflow, event: TriggerEvent): boolean {
       return t.type === "deal_status_changed" && t.status === event.status;
     case "form_submitted":
       return t.type === "form_submitted" && t.formId === event.formId;
+    case "intent_detected":
+      return t.type === "intent_detected" && t.intent === event.intent;
     case "webhook":
     case "manual":
       return workflow.id === event.workflowId;
@@ -75,24 +78,25 @@ export async function enroll(tx: Tx, workflow: Workflow, contactId: string, cont
   return run.id;
 }
 
-/** Ends a contact's runs in workflows set to stop when they reply. */
-async function stopOnReply(tx: Tx, workspaceId: string, contactId: string, now: Date) {
+const STOP_RULES = {
+  reply: { column: workflows.stopOnReply, note: "Contact replied", log: "Stopped: the contact replied" },
+  booking: { column: workflows.stopOnBooking, note: "Contact booked", log: "Stopped: the contact booked an appointment" },
+  won: { column: workflows.stopOnWon, note: "Deal won", log: "Stopped: a deal of theirs was won" },
+};
+
+/** Ends a contact's runs in workflows set to stop when this happens (they reply, book, or win). */
+async function stopRuns(tx: Tx, workspaceId: string, contactId: string, rule: keyof typeof STOP_RULES, now: Date) {
+  const { column, note, log } = STOP_RULES[rule];
   const runs = await tx
     .select({ id: workflowRuns.id })
     .from(workflowRuns)
     .innerJoin(workflows, eq(workflows.id, workflowRuns.workflowId))
-    .where(
-      and(
-        eq(workflowRuns.contactId, contactId),
-        inArray(workflowRuns.status, ["active", "waiting"]),
-        eq(workflows.stopOnReply, true),
-      ),
-    );
+    .where(and(eq(workflowRuns.contactId, contactId), inArray(workflowRuns.status, ["active", "waiting"]), eq(column, true)));
   if (!runs.length) return;
   const ids = runs.map((r) => r.id);
-  await tx.update(workflowRuns).set({ status: "stopped", nextStepId: null, finishedAt: now, note: "Contact replied" }).where(inArray(workflowRuns.id, ids));
+  await tx.update(workflowRuns).set({ status: "stopped", nextStepId: null, finishedAt: now, note }).where(inArray(workflowRuns.id, ids));
   await tx.delete(workflowQueue).where(inArray(workflowQueue.runId, ids));
-  await tx.insert(workflowRunLogs).values(ids.map((runId) => ({ workspaceId, runId, outcome: "Stopped: the contact replied" })));
+  await tx.insert(workflowRunLogs).values(ids.map((runId) => ({ workspaceId, runId, outcome: log })));
 }
 
 /**
@@ -101,7 +105,9 @@ async function stopOnReply(tx: Tx, workspaceId: string, contactId: string, now: 
  * themselves run later in the background.
  */
 export async function fireTrigger(tx: Tx, workspaceId: string, event: TriggerEvent, now = new Date()) {
-  if (event.type === "sms_received" || event.type === "email_received") await stopOnReply(tx, workspaceId, event.contactId, now);
+  if (event.type === "sms_received" || event.type === "email_received") await stopRuns(tx, workspaceId, event.contactId, "reply", now);
+  if (event.type === "appointment_booked") await stopRuns(tx, workspaceId, event.contactId, "booking", now);
+  if (event.type === "deal_status_changed" && event.status === "won") await stopRuns(tx, workspaceId, event.contactId, "won", now);
 
   // Adding someone by hand works while a workflow is off, so it can be tested.
   const scope =

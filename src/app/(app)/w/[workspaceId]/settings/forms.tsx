@@ -9,9 +9,13 @@ import {
   renameStageAction,
   reorderStagesAction,
 } from "@/actions/pipelines";
-import { updateMessagingSettingsAction } from "@/actions/messaging";
+import { removeAiSettingsAction, saveAiSettingsAction, testAiAction } from "@/actions/ai";
+import { saveLeadAlertsAction, updateMessagingSettingsAction } from "@/actions/messaging";
+import type { ActionState } from "@/actions/types";
 import { renameAccount, setClearPerItemAction } from "@/actions/workspaces";
-import { Button, Card, Field, FormError, Input, Textarea } from "@/components/ui";
+import { Button, Card, Field, FormError, Input, Select, Textarea } from "@/components/ui";
+import type { AiProvider } from "@/db/schema";
+import { AI_PROVIDERS } from "@/lib/ai";
 import { useActionForm } from "@/components/use-action-form";
 import { DEFAULT_STAGES } from "@/lib/default-stages";
 
@@ -214,5 +218,142 @@ export function ClearCountsSetting({ workspaceId, clearPerItem }: { workspaceId:
         </span>
       </span>
     </label>
+  );
+}
+
+export function LeadAlertsForm({
+  workspaceId,
+  settings,
+}: {
+  workspaceId: string;
+  settings: { minutes: number | null; email: string; phone: string };
+}) {
+  const [on, setOn] = useState(settings.minutes !== null);
+  const [state, onSubmit, pending] = useActionForm(saveLeadAlertsAction.bind(null, workspaceId));
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input type="checkbox" name="enabled" checked={on} onChange={(e) => setOn(e.target.checked)} className="h-4 w-4" />
+        Alert me when a lead waits too long for a reply
+      </label>
+      {on && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="After (minutes)" name="minutes">
+            <Input id="minutes" name="minutes" type="number" min={1} max={1440} defaultValue={settings.minutes ?? 15} />
+          </Field>
+          <Field label="Email the alert to" name="email">
+            <Input id="email" name="email" type="email" defaultValue={settings.email} placeholder="you@agency.com" />
+          </Field>
+          <Field label="Text the alert to" name="phone">
+            <Input id="phone" name="phone" defaultValue={settings.phone} placeholder="Your cell number" />
+          </Field>
+        </div>
+      )}
+      <FormError message={state.error} />
+      {state.ok && <p className="text-sm text-emerald-600">{state.message}</p>}
+      <Button type="submit" variant="secondary" disabled={pending}>
+        Save alerts
+      </Button>
+    </form>
+  );
+}
+
+export function AiSettingsForm({
+  workspaceId,
+  settings,
+}: {
+  workspaceId: string;
+  settings: { provider: AiProvider; model: string; baseUrl: string; about: string; tagMessages: boolean; keyEnding: string | null } | null;
+}) {
+  const [provider, setProvider] = useState<AiProvider>(settings?.provider ?? "anthropic");
+  const [model, setModel] = useState(settings?.model ?? AI_PROVIDERS[0].model);
+  const [state, onSubmit, pending] = useActionForm(saveAiSettingsAction.bind(null, workspaceId));
+  const [check, setCheck] = useState<ActionState>({});
+  const [checking, startCheck] = useTransition();
+  const info = AI_PROVIDERS.find((p) => p.id === provider)!;
+  const savedKey = settings?.provider === provider ? settings.keyEnding : null;
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="AI service" name="provider">
+          <Select
+            id="provider"
+            name="provider"
+            value={provider}
+            onChange={(e) => {
+              const next = e.target.value as AiProvider;
+              setProvider(next);
+              setModel(settings?.provider === next ? settings.model : (AI_PROVIDERS.find((p) => p.id === next)?.model ?? ""));
+            }}
+          >
+            {AI_PROVIDERS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Model" name="model">
+          <Input
+            id="model"
+            name="model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={provider === "anthropic" ? "claude-opus-5-5" : "The model's exact name from the service"}
+          />
+        </Field>
+        {provider === "openai_compatible" && (
+          <Field label="API address" name="baseUrl">
+            <Input id="baseUrl" name="baseUrl" defaultValue={settings?.baseUrl} placeholder="https://openrouter.ai/api/v1" />
+          </Field>
+        )}
+        <Field label={savedKey !== null && savedKey !== undefined ? `API key (saved, ends in ${savedKey || "…"})` : "API key"} name="apiKey">
+          <Input
+            id="apiKey"
+            name="apiKey"
+            type="password"
+            autoComplete="off"
+            placeholder={savedKey !== null && savedKey !== undefined ? "Leave blank to keep the saved key" : provider === "openai_compatible" ? "Leave blank if it needs none" : "Paste the key"}
+          />
+        </Field>
+      </div>
+      <p className="text-xs text-slate-500">{info.hint} The key is stored encrypted and never shown again.</p>
+      <Field label="About the business, for drafting replies" name="about">
+        <Textarea
+          id="about"
+          name="about"
+          rows={4}
+          defaultValue={settings?.about}
+          placeholder="What you do, your hours, prices you're happy to quote, how you like to sound. e.g. Family dentist in Oakland. Open Mon–Fri 8–5. Cleanings $120 without insurance. Friendly, never pushy."
+        />
+      </Field>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="tagMessages" defaultChecked={settings?.tagMessages ?? true} className="mt-0.5 h-4 w-4" />
+        <span>
+          <span className="block font-medium text-slate-700">Tag what each incoming message is about</span>
+          <span className="block text-slate-500">
+            Like &ldquo;Wants to book&rdquo; or &ldquo;Asking about price&rdquo;. Shows in the Inbox, and workflows can start from a tag. Uses one small AI request per message.
+          </span>
+        </span>
+      </label>
+      <FormError message={state.error ?? check.error} />
+      {(state.ok || check.ok) && <p className="text-sm text-emerald-600">{check.ok ? check.message : state.message}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="secondary" disabled={pending}>
+          Save AI
+        </Button>
+        {settings && (
+          <>
+            <Button type="button" variant="ghost" disabled={checking} onClick={() => startCheck(async () => setCheck(await testAiAction(workspaceId)))}>
+              {checking ? "Testing…" : "Test"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => startCheck(async () => setCheck(await removeAiSettingsAction(workspaceId)))}>
+              Disconnect
+            </Button>
+          </>
+        )}
+      </div>
+    </form>
   );
 }

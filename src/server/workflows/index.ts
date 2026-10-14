@@ -60,6 +60,8 @@ export type WorkflowInput = {
   trigger: unknown;
   steps: unknown;
   stopOnReply: boolean;
+  stopOnBooking?: boolean;
+  stopOnWon?: boolean;
   allowReentry: boolean;
 };
 
@@ -83,6 +85,8 @@ export async function saveWorkflow(db: Db, workspaceId: string, workflowId: stri
         trigger: trigger.data,
         steps: steps.data,
         stopOnReply: input.stopOnReply,
+        stopOnBooking: input.stopOnBooking ?? false,
+        stopOnWon: input.stopOnWon ?? false,
         allowReentry: input.allowReentry,
         updatedAt: new Date(),
       })

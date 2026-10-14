@@ -9,7 +9,9 @@ import { requireWorkspace } from "@/lib/session";
 import { getBadgePrefs } from "@/server/badges";
 import { messagingConfig, replyToAddress } from "@/server/messaging/config";
 import { listPipelines } from "@/server/pipelines";
-import { ClearCountsSetting, MessagingForm, NewPipelineForm, PipelineEditor, RenameAccountForm } from "./forms";
+import { getAiSettings } from "@/server/ai";
+import { leadAlertProblems } from "@/server/lead-alerts";
+import { AiSettingsForm, ClearCountsSetting, LeadAlertsForm, MessagingForm, NewPipelineForm, PipelineEditor, RenameAccountForm } from "./forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -17,6 +19,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
   const { workspaceId } = await params;
   const { workspace, user } = await requireWorkspace(workspaceId);
   const prefs = await getBadgePrefs(db, user.id);
+  const ai = await getAiSettings(db, workspaceId);
+  const alertProblems = leadAlertProblems(workspace);
   const config = messagingConfig();
   const pipelines = await listPipelines(db, workspaceId);
   const stages = pipelines.length
@@ -82,6 +86,39 @@ export default async function SettingsPage({ params }: { params: Promise<{ works
             <Hook label="Replies to this account's emails go to" value={replyToAddress(workspaceId) ?? "Set POSTMARK_INBOUND_ADDRESS first"} />
           </dl>
         </details>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-1 font-semibold">Speed-to-lead alerts</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          When someone texts, emails or fills in a form and nobody has replied in time, you get an email or text. Replies sent by automations don&apos;t count, only a
+          person answering. One alert per wait.
+        </p>
+        {alertProblems.map((p) => (
+          <p key={p} className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {p}
+          </p>
+        ))}
+        <LeadAlertsForm
+          workspaceId={workspaceId}
+          settings={{ minutes: workspace.leadAlertMinutes, email: workspace.leadAlertEmail ?? "", phone: formatPhone(workspace.leadAlertPhone) }}
+        />
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-1 font-semibold">AI</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Connect the AI of your choice to draft replies in the Inbox and tag what messages are about. It never sends anything by itself: you read and send every
+          draft.
+        </p>
+        <AiSettingsForm
+          workspaceId={workspaceId}
+          settings={
+            ai
+              ? { provider: ai.provider, model: ai.model, baseUrl: ai.baseUrl ?? "", about: ai.about, tagMessages: ai.tagMessages, keyEnding: ai.hasKey ? ai.keyEnding : null }
+              : null
+          }
+        />
       </Card>
 
       <div>

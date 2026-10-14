@@ -1,4 +1,5 @@
 import type { WorkflowCondition, WorkflowStep, WorkflowTrigger } from "@/db/schema";
+import { INTENT_LABEL, isIntent } from "@/lib/ai";
 
 // Words for the workflow builder, shared by the server and the browser.
 
@@ -14,6 +15,7 @@ export const TRIGGER_LABEL: Record<WorkflowTrigger["type"], string> = {
   deal_stage_changed: "Deal moved to a stage",
   deal_status_changed: "Deal won or lost",
   form_submitted: "Form filled in",
+  intent_detected: "AI tagged a message",
   webhook: "Data sent in",
 };
 
@@ -29,6 +31,7 @@ export const TRIGGER_HELP: Record<WorkflowTrigger["type"], string> = {
   deal_stage_changed: "A deal lands in a pipeline stage.",
   deal_status_changed: "A deal is marked won or lost.",
   form_submitted: "Someone fills in one of your website forms.",
+  intent_detected: "The AI reads a text, iMessage, WhatsApp or email and tags what it's about. Connect an AI in Settings first.",
   webhook: "Your website or another app (Zapier, Make…) sends a lead in.",
 };
 
@@ -155,6 +158,8 @@ export function summarizeTrigger(
       return stageName(t.stageId) ? `Deal moved to ${stageName(t.stageId)}` : "Pick a stage";
     case "deal_status_changed":
       return `Deal marked ${t.status}`;
+    case "intent_detected":
+      return isIntent(t.intent) ? `Tagged "${INTENT_LABEL[t.intent]}"` : "Pick a tag";
     default:
       return TRIGGER_HELP[t.type];
   }
@@ -208,6 +213,8 @@ export function blankTrigger(type: WorkflowTrigger["type"], defaults: { stageId?
       return { type, stageId: defaults.stageId ?? "" };
     case "deal_status_changed":
       return { type, status: "won" };
+    case "intent_detected":
+      return { type, intent: "wants_to_book" };
     default:
       return { type };
   }
