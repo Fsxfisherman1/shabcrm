@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { contactName } from "@/lib/format";
 import { requireWorkspace } from "@/lib/session";
+import { markTabSeen } from "@/server/badges";
 import { getBookingPage, listAppointments, listCalendars } from "@/server/calendars";
 import { oauthApp } from "@/server/calendars/config";
 import { messagingConfig } from "@/server/messaging/config";
@@ -26,7 +27,8 @@ export default async function CalendarPage({
 }) {
   const { workspaceId } = await params;
   const { connected, error } = await searchParams;
-  const { workspace } = await requireWorkspace(workspaceId);
+  const { workspace, user } = await requireWorkspace(workspaceId);
+  await markTabSeen(db, user.id, workspaceId, "calendar");
   const [page, cals, upcoming] = await Promise.all([
     getBookingPage(db, workspaceId),
     listCalendars(db, workspaceId),

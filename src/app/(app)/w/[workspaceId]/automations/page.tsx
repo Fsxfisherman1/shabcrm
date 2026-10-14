@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { requireWorkspace } from "@/lib/session";
+import { markTabSeen } from "@/server/badges";
 import { TRIGGER_LABEL } from "@/lib/workflows";
 import { listWorkflows } from "@/server/workflows";
 import { TEMPLATES } from "@/server/workflows/templates";
@@ -13,7 +14,8 @@ export const metadata: Metadata = { title: "Automations" };
 
 export default async function AutomationsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
-  await requireWorkspace(workspaceId);
+  const { user } = await requireWorkspace(workspaceId);
+  await markTabSeen(db, user.id, workspaceId, "automations");
   const list = await listWorkflows(db, workspaceId);
 
   return (

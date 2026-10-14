@@ -10,7 +10,7 @@ import {
   reorderStagesAction,
 } from "@/actions/pipelines";
 import { updateMessagingSettingsAction } from "@/actions/messaging";
-import { renameAccount } from "@/actions/workspaces";
+import { renameAccount, setClearPerItemAction } from "@/actions/workspaces";
 import { Button, Card, Field, FormError, Input, Textarea } from "@/components/ui";
 import { useActionForm } from "@/components/use-action-form";
 import { DEFAULT_STAGES } from "@/lib/default-stages";
@@ -184,5 +184,35 @@ export function MessagingForm({
         Save messaging
       </Button>
     </form>
+  );
+}
+
+export function ClearCountsSetting({ workspaceId, clearPerItem }: { workspaceId: string; clearPerItem: boolean }) {
+  const [on, setOn] = useState(clearPerItem);
+  const [pending, startTransition] = useTransition();
+  return (
+    <label className="flex gap-3">
+      <input
+        type="checkbox"
+        role="switch"
+        className="mt-1 h-4 w-4 accent-brand-600"
+        checked={on}
+        disabled={pending}
+        onChange={(e) => {
+          const next = e.target.checked;
+          setOn(next);
+          startTransition(() => setClearPerItemAction(workspaceId, next));
+        }}
+      />
+      <span>
+        <span className="block text-sm font-medium">Clear each red count when I open that item</span>
+        <span className="block text-sm text-slate-500">
+          {on
+            ? "On: a new contact counts until you open their page, a booking until you open the person, a deal until you open its contact or move it, a form response until you open the form or the person, and a failed run until you open its workflow."
+            : "Off: opening a tab clears its whole count."}{" "}
+          Inbox clears as you read conversations and To-do as you check things off, either way.
+        </span>
+      </span>
+    </label>
   );
 }

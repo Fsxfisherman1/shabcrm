@@ -111,6 +111,52 @@ export const memberships = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.workspaceId] })],
 );
 
+// When each person last opened each tab of an account, so the sidebar can
+// count what's new since. Per person, like todos, so it's read by user id.
+export const tabSeen = pgTable(
+  "tab_seen",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    tab: text("tab").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.workspaceId, t.tab] })],
+);
+
+// Personal preferences that apply in every account.
+export const userPrefs = pgTable("user_prefs", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // On: a red count clears item by item as each one is opened. Off: opening the tab clears it.
+  clearPerItem: boolean("clear_per_item").notNull().default(true),
+  // Items from before this don't count, so turning it on starts from zero.
+  perItemSince: timestamp("per_item_since", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Which contacts, deals, bookings, form responses and failed runs each person
+// has opened, for clearing counts item by item.
+export const itemSeen = pgTable(
+  "item_seen",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    itemId: uuid("item_id").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind, t.itemId] })],
+);
+
 // ---------------------------------------------------------------------------
 // Tenant tables. Every row carries workspace_id and is protected by row-level
 // security (see drizzle/0001_row_level_security.sql).
@@ -227,6 +273,7 @@ export const deals = pgTable(
     title: text("title").notNull(),
     valueCents: integer("value_cents").notNull().default(0),
     status: dealStatus("status").notNull().default("open"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

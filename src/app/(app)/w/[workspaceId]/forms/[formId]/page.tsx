@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui";
 import { contactName } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { requireWorkspace } from "@/lib/session";
+import { markItemsSeen } from "@/server/badges";
 import { messagingConfig } from "@/server/messaging/config";
 import { getForm, listSubmissions } from "@/server/forms";
 import { FormEditor } from "./editor";
@@ -16,11 +17,12 @@ export const metadata: Metadata = { title: "Form" };
 
 export default async function FormEditorPage({ params }: { params: Promise<{ workspaceId: string; formId: string }> }) {
   const { workspaceId, formId } = await params;
-  const { workspace } = await requireWorkspace(workspaceId);
+  const { workspace, user } = await requireWorkspace(workspaceId);
   if (!/^[0-9a-f-]{36}$/i.test(formId)) notFound();
   const form = await getForm(db, workspaceId, formId);
   if (!form) notFound();
   const submissions = await listSubmissions(db, workspaceId, formId);
+  await markItemsSeen(db, user.id, workspaceId, "submission", submissions.map(({ submission }) => submission.id));
   const { appUrl } = messagingConfig();
   const when = (d: Date) => DateTime.fromJSDate(d, { zone: workspace.timezone }).toFormat("LLL d, h:mm a");
 
